@@ -1,0 +1,41 @@
+from dolfin import *
+import matplotlib.pyplot as plt
+
+# Definir la geometría
+mesh = UnitCubeMesh(10, 10, 10)
+
+# Definir las funciones de espacio
+V = VectorFunctionSpace(mesh, "Lagrange", 1)
+E = FunctionSpace(mesh, "Lagrange", 1)
+
+# Definir las funciones de prueba
+v = TestFunction(V)
+phi = TestFunction(E)
+
+# Definir las funciones de campo
+u = TrialFunction(V)
+psi = TrialFunction(E)
+
+# Definir las constantes físicas
+eps = Constant(1.0)
+mu = Constant(1.0)
+
+# Definir las ecuaciones de Maxwell
+a = inner(curl(u), curl(v)) * dx + eps * inner(u, v) * dx
+L = inner(Constant((0, 0, 0)), v) * dx
+
+b = -inner(curl(psi), v) * dx
+c = inner(psi, curl(phi)) * dx
+
+# Resolver el sistema de ecuaciones
+u = Function(V)
+psi = Function(E)
+
+solve(a == L, u)
+solve(b == c, psi)
+
+# Visualizar los resultados
+plot(u)
+plot(psi)
+
+plt.show()
