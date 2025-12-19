@@ -1,0 +1,53 @@
+
+                 ██████╗  ██████╗ ████████╗███████╗    ██╗   ██╗██╗███████╗
+                ██╔════╝ ██╔═══██╗╚══██╔══╝██╔════╝    ██║   ██║██║██╔════╝
+                ██║  ███╗██║   ██║   ██║   ███████╗    ██║   ██║██║███████╗
+                ██║   ██║██║   ██║   ██║   ╚════██║    ██║   ██║██║╚════██║
+                ╚██████╔╝╚██████╔╝   ██║   ███████║    ╚██████╔╝██║███████║
+                 ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝     ╚═════╝ ╚═╝╚══════╝
+                ANÁLISIS DE ABERRACIONES ÓPTICAS - SENSOR SHACK-HARTMANN
+======================================================================
+Archivo analizado: lenteImpresa.csv
+Fecha de análisis: 2025-10-26 08:18:38
+
+MÉTRICAS PRINCIPALES
+----------------------------------------
+PV (Peak-to-Valley): 8.950 µm
+RMS: 2.080 µm
+Diámetro de pupila: 3.00 mm
+
+COEFICIENTES DE ZERNIKE
+----------------------------------------
+Z 0: Pistón                                 1.654 µm [SIGNIFICATIVO]
+Z 1: Inclinación X (Tip)                    5.336 µm [DOMINANTE]
+Z 2: Inclinación Y (Tilt)                   0.171 µm
+Z 3: Desenfoque                             0.241 µm
+Z 4: Astigmatismo a 0°                     -7.651 µm [DOMINANTE]
+Z 5: Astigmatismo a 45°                     0.163 µm
+Z 6: Coma X                                -0.009 µm
+Z 7: Coma Y                                 0.037 µm
+Z 8: Aberración Esférica                    0.079 µm
+Z 9: Trefoil X                              0.023 µm
+Z10: Trefoil Y                              0.027 µm
+Z11: Astigmatismo Secundario a 0°          -0.018 µm
+Z12: Astigmatismo Secundario a 45°         -0.012 µm
+Z13: Esférica Secundaria                   -0.027 µm
+Z14: Tetrafoil                             -0.014 µm
+
+ABERRACIONES SIGNIFICATIVAS (> 0.1 µm)
+----------------------------------------
+- Pistón: 1.654 µm
+- Inclinación X (Tip): 5.336 µm
+- Inclinación Y (Tilt): 0.171 µm
+- Desenfoque: 0.241 µm
+- Astigmatismo a 0°: -7.651 µm
+- Astigmatismo a 45°: 0.163 µm
+
+EVALUACIÓN DE CALIDAD ÓPTICA
+----------------------------------------
+Calidad: Regular (RMS < 5.0 µm)
+
+INTERPRETACIÓN DETALLADA
+----------------------------------------
+• La lente presenta ASTIGMATISMO significativo
+  (diferente potencia en meridianos ortogonales)
