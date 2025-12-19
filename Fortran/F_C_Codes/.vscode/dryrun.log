@@ -1,0 +1,6 @@
+make --dry-run --always-make --keep-going --print-directory
+make: Entering directory '/home/jafert/Desktop/U/UIS/Bibliografia Séptimo semestre/Física computacional/Computation-/F_C_Codes'
+make: Leaving directory '/home/jafert/Desktop/U/UIS/Bibliografia Séptimo semestre/Física computacional/Computation-/F_C_Codes'
+ 
+make: *** No targets specified and no makefile found.  Stop.
+
