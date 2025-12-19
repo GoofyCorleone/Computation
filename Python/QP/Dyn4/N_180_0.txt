@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	21:45:54
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         9724 	
+        2	         9783 	
+        3	         9645 	
+        4	         9675 	
+        5	         9670 	
+        6	         9722 	
+        7	         9612 	
+        8	         9675 	
+        9	         9545 	
+       10	         9759 	
+       11	         9550 	
+       12	         9677 	
+       13	         9633 	
+       14	         9623 	
+       15	         9704 	
+       16	         9717 	
+       17	         9742 	
+       18	         9770 	
+       19	         9642 	
+       20	         9658 	
+       21	         9730 	
+       22	         9616 	
+       23	         9658 	
+       24	         9615 	
+       25	         9616 	
+       26	         9681 	
+       27	         9707 	
+       28	         9601 	
+       29	         9820 	
+       30	         9587 	
+       31	         9733 	
+       32	         9636 	
+       33	         9593 	
+       34	         9723 	
+       35	         9739 	
+       36	         9631 	
+       37	         9537 	
+       38	         9753 	
+       39	         9729 	
+       40	         9615 	
+       41	         9644 	
+       42	         9650 	
+       43	         9760 	
+       44	         9535 	
+       45	         9448 	
+       46	         9564 	
+       47	         9655 	
+       48	         9606 	
+       49	         9733 	
+       50	         9692 	
+       51	         9826 	
+       52	         9705 	
+       53	         9672 	
+       54	         9680 	
+       55	         9653 	
+       56	         9937 	
+       57	         9575 	
+       58	         9853 	
+       59	         9612 	
+       60	         9735 	
+       61	         9742 	
+       62	         9605 	
+       63	         9562 	
+       64	         9650 	
+       65	         9928 	
+       66	         9834 	
+       67	         9776 	
+       68	         9890 	
+       69	         9809 	
+       70	         9605 	
+       71	         9592 	
+       72	         9702 	
+       73	         9636 	
+       74	         9632 	
+       75	         9645 	
+       76	         9743 	
+       77	         9744 	
+       78	         9665 	
+       79	         9640 	
+       80	         9712 	
+       81	         9708 	
+       82	         9755 	
+       83	         9628 	
+       84	         9701 	
+       85	         9629 	
+       86	         9799 	
+       87	         9719 	
+       88	         9598 	
+       89	         9664 	
+       90	         9698 	
+       91	         9637 	
+       92	         9633 	
+       93	         9567 	
+       94	         9737 	
+       95	         9646 	
+       96	         9686 	
+       97	         9558 	
+       98	         9602 	
+       99	         9722 	
+      100	         9787 	

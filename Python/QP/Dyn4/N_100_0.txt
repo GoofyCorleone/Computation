@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	21:41:24
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         7901 	
+        2	         7910 	
+        3	         7799 	
+        4	         7898 	
+        5	         7832 	
+        6	         7739 	
+        7	         7827 	
+        8	         7735 	
+        9	         7607 	
+       10	         7832 	
+       11	         7700 	
+       12	         7844 	
+       13	         7825 	
+       14	         7824 	
+       15	         7854 	
+       16	         7712 	
+       17	         7830 	
+       18	         7791 	
+       19	         7583 	
+       20	         7809 	
+       21	         7816 	
+       22	         7742 	
+       23	         7806 	
+       24	         7778 	
+       25	         7789 	
+       26	         7891 	
+       27	         7646 	
+       28	         7850 	
+       29	         7866 	
+       30	         7727 	
+       31	         7888 	
+       32	         7790 	
+       33	         7814 	
+       34	         7701 	
+       35	         7781 	
+       36	         7870 	
+       37	         7901 	
+       38	         7828 	
+       39	         7733 	
+       40	         7860 	
+       41	         7735 	
+       42	         7706 	
+       43	         7790 	
+       44	         7808 	
+       45	         7930 	
+       46	         7795 	
+       47	         7780 	
+       48	         7809 	
+       49	         7788 	
+       50	         7814 	
+       51	         7768 	
+       52	         7764 	
+       53	         7869 	
+       54	         7767 	
+       55	         7826 	
+       56	         7786 	
+       57	         7830 	
+       58	         7903 	
+       59	         7742 	
+       60	         7798 	
+       61	         7807 	
+       62	         7774 	
+       63	         7792 	
+       64	         7716 	
+       65	         7854 	
+       66	         7733 	
+       67	         7732 	
+       68	         7729 	
+       69	         7783 	
+       70	         7779 	
+       71	         7741 	
+       72	         7653 	
+       73	         7775 	
+       74	         7788 	
+       75	         7898 	
+       76	         7796 	
+       77	         7760 	
+       78	         7828 	
+       79	         7874 	
+       80	         7711 	
+       81	         7917 	
+       82	         7787 	
+       83	         7763 	
+       84	         7857 	
+       85	         7854 	
+       86	         7650 	
+       87	         7798 	
+       88	         7797 	
+       89	         7747 	
+       90	         7561 	
+       91	         8102 	
+       92	         7774 	
+       93	         7741 	
+       94	         7887 	
+       95	         7797 	
+       96	         7816 	
+       97	         7770 	
+       98	         7896 	
+       99	         7988 	
+      100	         8044 	

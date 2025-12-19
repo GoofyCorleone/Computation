@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	21:52:28
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         6095 	
+        2	         6103 	
+        3	         6171 	
+        4	         6207 	
+        5	         5930 	
+        6	         6151 	
+        7	         6272 	
+        8	         5967 	
+        9	         6130 	
+       10	         6066 	
+       11	         6079 	
+       12	         6035 	
+       13	         6102 	
+       14	         6116 	
+       15	         6007 	
+       16	         6169 	
+       17	         6055 	
+       18	         6107 	
+       19	         6285 	
+       20	         6231 	
+       21	         6115 	
+       22	         5990 	
+       23	         6178 	
+       24	         6180 	
+       25	         6127 	
+       26	         6157 	
+       27	         6132 	
+       28	         6088 	
+       29	         5944 	
+       30	         6118 	
+       31	         6017 	
+       32	         5978 	
+       33	         5954 	
+       34	         6200 	
+       35	         5953 	
+       36	         6141 	
+       37	         6139 	
+       38	         6013 	
+       39	         6031 	
+       40	         6170 	
+       41	         6113 	
+       42	         5971 	
+       43	         6103 	
+       44	         6028 	
+       45	         6072 	
+       46	         6194 	
+       47	         6003 	
+       48	         6076 	
+       49	         6049 	
+       50	         6204 	
+       51	         6216 	
+       52	         6142 	
+       53	         6181 	
+       54	         6024 	
+       55	         6183 	
+       56	         6125 	
+       57	         6169 	
+       58	         6015 	
+       59	         6079 	
+       60	         6157 	
+       61	         5970 	
+       62	         5978 	
+       63	         5924 	
+       64	         6157 	
+       65	         6081 	
+       66	         6098 	
+       67	         6295 	
+       68	         6079 	
+       69	         6111 	
+       70	         6129 	
+       71	         5998 	
+       72	         6150 	
+       73	         6243 	
+       74	         6052 	
+       75	         6122 	
+       76	         6135 	
+       77	         5912 	
+       78	         6156 	
+       79	         6062 	
+       80	         6038 	
+       81	         6125 	
+       82	         6186 	
+       83	         6087 	
+       84	         6056 	
+       85	         6046 	
+       86	         6140 	
+       87	         6131 	
+       88	         5991 	
+       89	         6163 	
+       90	         6213 	
+       91	         5998 	
+       92	         6211 	
+       93	         6095 	
+       94	         6108 	
+       95	         6089 	
+       96	         6118 	
+       97	         6090 	
+       98	         6152 	
+       99	         6110 	
+      100	         5994 	

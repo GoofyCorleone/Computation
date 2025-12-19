@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	21:56:15
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         8532 	
+        2	         8586 	
+        3	         8615 	
+        4	         8710 	
+        5	         8685 	
+        6	         8790 	
+        7	         8596 	
+        8	         8663 	
+        9	         8771 	
+       10	         8839 	
+       11	         8803 	
+       12	         8739 	
+       13	         8557 	
+       14	         8712 	
+       15	         8561 	
+       16	         8558 	
+       17	         8534 	
+       18	         8704 	
+       19	         8766 	
+       20	         8653 	
+       21	         8822 	
+       22	         8670 	
+       23	         8705 	
+       24	         8701 	
+       25	         8647 	
+       26	         8646 	
+       27	         8774 	
+       28	         8532 	
+       29	         8585 	
+       30	         8634 	
+       31	         8741 	
+       32	         8600 	
+       33	         8604 	
+       34	         8582 	
+       35	         8542 	
+       36	         8781 	
+       37	         8699 	
+       38	         8750 	
+       39	         8836 	
+       40	         8565 	
+       41	         8724 	
+       42	         8609 	
+       43	         8643 	
+       44	         8671 	
+       45	         8778 	
+       46	         8563 	
+       47	         8601 	
+       48	         8674 	
+       49	         8825 	
+       50	         8842 	
+       51	         8787 	
+       52	         8722 	
+       53	         8903 	
+       54	         8682 	
+       55	         8576 	
+       56	         8822 	
+       57	         8610 	
+       58	         8764 	
+       59	         8706 	
+       60	         8662 	
+       61	         8622 	
+       62	         8922 	
+       63	         8515 	
+       64	         8748 	
+       65	         8812 	
+       66	         8722 	
+       67	         8677 	
+       68	         8573 	
+       69	         8742 	
+       70	         8645 	
+       71	         8599 	
+       72	         8597 	
+       73	         8552 	
+       74	         8664 	
+       75	         8685 	
+       76	         8801 	
+       77	         8666 	
+       78	         8746 	
+       79	         8815 	
+       80	         8712 	
+       81	         8782 	
+       82	         8611 	
+       83	         8506 	
+       84	         8811 	
+       85	         8525 	
+       86	         8695 	
+       87	         8749 	
+       88	         8697 	
+       89	         8607 	
+       90	         8656 	
+       91	         8668 	
+       92	         8612 	
+       93	         8554 	
+       94	         8629 	
+       95	         8642 	
+       96	         8804 	
+       97	         8621 	
+       98	         8707 	
+       99	         8473 	
+      100	         8533 	

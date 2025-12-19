@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	21:39:18
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         5568 	
+        2	         5622 	
+        3	         5682 	
+        4	         5558 	
+        5	         5601 	
+        6	         5747 	
+        7	         5656 	
+        8	         5583 	
+        9	         5746 	
+       10	         5694 	
+       11	         5778 	
+       12	         5750 	
+       13	         5671 	
+       14	         5576 	
+       15	         5692 	
+       16	         5603 	
+       17	         5565 	
+       18	         5650 	
+       19	         5623 	
+       20	         5607 	
+       21	         5562 	
+       22	         5583 	
+       23	         5552 	
+       24	         5670 	
+       25	         5695 	
+       26	         5748 	
+       27	         5479 	
+       28	         5642 	
+       29	         5529 	
+       30	         5483 	
+       31	         5605 	
+       32	         5504 	
+       33	         5709 	
+       34	         5615 	
+       35	         5649 	
+       36	         5527 	
+       37	         5558 	
+       38	         5583 	
+       39	         5661 	
+       40	         5714 	
+       41	         5533 	
+       42	         5714 	
+       43	         5540 	
+       44	         5636 	
+       45	         5661 	
+       46	         5581 	
+       47	         5728 	
+       48	         5666 	
+       49	         5578 	
+       50	         5641 	
+       51	         5628 	
+       52	         5686 	
+       53	         5674 	
+       54	         5497 	
+       55	         5726 	
+       56	         5765 	
+       57	         5536 	
+       58	         5627 	
+       59	         5533 	
+       60	         5690 	
+       61	         5624 	
+       62	         5700 	
+       63	         5487 	
+       64	         5557 	
+       65	         5648 	
+       66	         5672 	
+       67	         5667 	
+       68	         5715 	
+       69	         5776 	
+       70	         5559 	
+       71	         5608 	
+       72	         5690 	
+       73	         5589 	
+       74	         5654 	
+       75	         5697 	
+       76	         5661 	
+       77	         5653 	
+       78	         5688 	
+       79	         5641 	
+       80	         5452 	
+       81	         5580 	
+       82	         5562 	
+       83	         5547 	
+       84	         5797 	
+       85	         5564 	
+       86	         5693 	
+       87	         5664 	
+       88	         5596 	
+       89	         5593 	
+       90	         5626 	
+       91	         5522 	
+       92	         5694 	
+       93	         5642 	
+       94	         5520 	
+       95	         5539 	
+       96	         5810 	
+       97	         5578 	
+       98	         5565 	
+       99	         5450 	
+      100	         5648 	
