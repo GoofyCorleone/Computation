@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-06-25
+Time (HH:MM:SS):	17:17:17
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	          395 	
+        2	          421 	
+        3	          379 	
+        4	          408 	
+        5	          395 	
+        6	          388 	
+        7	          358 	
+        8	          385 	
+        9	          392 	
+       10	          422 	
+       11	          424 	
+       12	          378 	
+       13	          400 	
+       14	          372 	
+       15	          376 	
+       16	          424 	
+       17	          412 	
+       18	          399 	
+       19	          407 	
+       20	          369 	
+       21	          387 	
+       22	          374 	
+       23	          411 	
+       24	          369 	
+       25	          383 	
+       26	          388 	
+       27	          389 	
+       28	          380 	
+       29	          402 	
+       30	          384 	
+       31	          393 	
+       32	          437 	
+       33	          387 	
+       34	          388 	
+       35	          369 	
+       36	          371 	
+       37	          399 	
+       38	          379 	
+       39	          368 	
+       40	          374 	
+       41	          371 	
+       42	          411 	
+       43	          423 	
+       44	          372 	
+       45	          388 	
+       46	          402 	
+       47	          386 	
+       48	          417 	
+       49	          392 	
+       50	          427 	
+       51	          387 	
+       52	          378 	
+       53	          414 	
+       54	          410 	
+       55	          391 	
+       56	          404 	
+       57	          391 	
+       58	          404 	
+       59	          372 	
+       60	          413 	
+       61	          373 	
+       62	          398 	
+       63	          407 	
+       64	          379 	
+       65	          408 	
+       66	          382 	
+       67	          375 	
+       68	          384 	
+       69	          388 	
+       70	          399 	
+       71	          378 	
+       72	          372 	
+       73	          395 	
+       74	          368 	
+       75	          375 	
+       76	          387 	
+       77	          342 	
+       78	          383 	
+       79	          351 	
+       80	          382 	
+       81	          411 	
+       82	          357 	
+       83	          378 	
+       84	          378 	
+       85	          378 	
+       86	          409 	
+       87	          364 	
+       88	          355 	
+       89	          363 	
+       90	          346 	
+       91	          373 	
+       92	          383 	
+       93	          410 	
+       94	          404 	
+       95	          414 	
+       96	          409 	
+       97	          366 	
+       98	          363 	
+       99	          398 	
+      100	          388 	
