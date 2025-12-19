@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-02
+Time (HH:MM:SS):	17:56:06
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	           63 	
+        2	           60 	
+        3	           64 	
+        4	           75 	
+        5	           72 	
+        6	           65 	
+        7	           79 	
+        8	           55 	
+        9	           85 	
+       10	           65 	
+       11	           52 	
+       12	           63 	
+       13	           66 	
+       14	           82 	
+       15	           65 	
+       16	           63 	
+       17	           59 	
+       18	           52 	
+       19	           61 	
+       20	           82 	
+       21	           62 	
+       22	           58 	
+       23	           68 	
+       24	           64 	
+       25	           70 	
+       26	           65 	
+       27	           70 	
+       28	           60 	
+       29	           76 	
+       30	           78 	
+       31	           77 	
+       32	           65 	
+       33	           71 	
+       34	           73 	
+       35	           67 	
+       36	           65 	
+       37	           64 	
+       38	           70 	
+       39	           56 	
+       40	           74 	
+       41	           66 	
+       42	           67 	
+       43	           64 	
+       44	           56 	
+       45	           65 	
+       46	           66 	
+       47	           79 	
+       48	           59 	
+       49	           70 	
+       50	           63 	
+       51	           71 	
+       52	           58 	
+       53	           70 	
+       54	           76 	
+       55	           57 	
+       56	           70 	
+       57	           58 	
+       58	           84 	
+       59	           68 	
+       60	           83 	
+       61	           64 	
+       62	           67 	
+       63	           67 	
+       64	           85 	
+       65	           54 	
+       66	           80 	
+       67	           53 	
+       68	           59 	
+       69	           62 	
+       70	           62 	
+       71	           69 	
+       72	           74 	
+       73	           64 	
+       74	           63 	
+       75	           63 	
+       76	           79 	
+       77	           71 	
+       78	           67 	
+       79	           66 	
+       80	           48 	
+       81	           59 	
+       82	           82 	
+       83	           78 	
+       84	           62 	
+       85	           59 	
+       86	           69 	
+       87	           69 	
+       88	           68 	
+       89	           68 	
+       90	           54 	
+       91	           56 	
+       92	           55 	
+       93	           51 	
+       94	           56 	
+       95	           65 	
+       96	           77 	
+       97	           73 	
+       98	           54 	
+       99	           44 	
+      100	           76 	
