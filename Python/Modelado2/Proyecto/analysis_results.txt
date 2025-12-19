@@ -1,0 +1,46 @@
+
+                         ██████╗  ██████╗ ████████╗███████╗    ██╗   ██╗██╗███████╗
+                        ██╔════╝ ██╔═══██╗╚══██╔══╝██╔════╝    ██║   ██║██║██╔════╝
+                        ██║  ███╗██║   ██║   ██║   ███████╗    ██║   ██║██║███████╗
+                        ██║   ██║██║   ██║   ██║   ╚════██║    ██║   ██║██║╚════██║
+                        ╚██████╔╝╚██████╔╝   ██║   ███████║    ╚██████╔╝██║███████║
+                         ╚═════╝  ╚═════╝    ╚═╝   ╚══════╝     ╚═════╝ ╚═╝╚══════╝
+                        === RESULTADOS DEL ANÁLISIS DE POLARIZACIÓN ===
+
+1. INFORMACIÓN GENERAL
+Número de mediciones: 1024
+Duración del experimento: -0.8 segundos
+
+2. ESTADÍSTICAS DESCRIPTIVAS
+Radio medio (DOP): 1.000000
+Theta medio: 1.727211 rad
+Phi medio: 1.516821 rad
+DOP promedio: -43.9938%
+
+3. PARÁMETROS ESTIMADOS
+Kappa (bootstrap): 3.0830
+IC95% Kappa: [2.8741, 3.3036]
+
+4. PRUEBAS DE BONDAD DE AJUSTE
+Theta - KS: 0.1231, p-value: 0.0000
+Phi - KS: 0.3832, p-value: 0.0000
+DOP - KS: nan, p-value: nan
+Stokes 1 - Shapiro: 0.9263, p-value: 0.0000
+Theta - Shapiro: 0.9569, p-value: 0.0000
+
+5. INTERVALOS DE CONFIANZA (BOOTSTRAP)
+Stokes 1 - Media: -0.416450, IC95%: [-0.443771, -0.389092]
+DOP - Media: 1.0000%, IC95%: [1.0000, 1.0000]
+
+6. PRUEBAS DE HIPÓTESIS
+Estadístico de Rayleigh: 456.0935
+R (vector resultante): 0.6674
+Prueba de isotropía: χ² = 1368.2805, p-value = 0.000000
+Conclusión isotropía: NO isotrópica
+
+7. DISTRIBUCIÓN KENT
+8. INTERPRETACIÓN FÍSICA
+• Existe dirección preferencial en la polarización
+• El sistema muestra memoria de polarización
+• Los datos no muestran fuerte concentración direccional
+• Podría aproximarse mejor con distribución uniforme esférica
