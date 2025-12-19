@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	20:56:02
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         2997 	
+        2	         3126 	
+        3	         3185 	
+        4	         3151 	
+        5	         3164 	
+        6	         3233 	
+        7	         3193 	
+        8	         3141 	
+        9	         3069 	
+       10	         3073 	
+       11	         3172 	
+       12	         3156 	
+       13	         3131 	
+       14	         3121 	
+       15	         3225 	
+       16	         3242 	
+       17	         3246 	
+       18	         3099 	
+       19	         3092 	
+       20	         3106 	
+       21	         3154 	
+       22	         3038 	
+       23	         3104 	
+       24	         3028 	
+       25	         3063 	
+       26	         3178 	
+       27	         3148 	
+       28	         3153 	
+       29	         3071 	
+       30	         3134 	
+       31	         3166 	
+       32	         2994 	
+       33	         3160 	
+       34	         3220 	
+       35	         3188 	
+       36	         3211 	
+       37	         3144 	
+       38	         3159 	
+       39	         3167 	
+       40	         3100 	
+       41	         3118 	
+       42	         3171 	
+       43	         3163 	
+       44	         3189 	
+       45	         3035 	
+       46	         3020 	
+       47	         3120 	
+       48	         3114 	
+       49	         3102 	
+       50	         3183 	
+       51	         3152 	
+       52	         3186 	
+       53	         3035 	
+       54	         3151 	
+       55	         3052 	
+       56	         3149 	
+       57	         3034 	
+       58	         3127 	
+       59	         3093 	
+       60	         3154 	
+       61	         3193 	
+       62	         3112 	
+       63	         3092 	
+       64	         3168 	
+       65	         3163 	
+       66	         3267 	
+       67	         3171 	
+       68	         3058 	
+       69	         3180 	
+       70	         3191 	
+       71	         3188 	
+       72	         3178 	
+       73	         3247 	
+       74	         3139 	
+       75	         3100 	
+       76	         3104 	
+       77	         3149 	
+       78	         3208 	
+       79	         3192 	
+       80	         3185 	
+       81	         3150 	
+       82	         3175 	
+       83	         3204 	
+       84	         3220 	
+       85	         3151 	
+       86	         3179 	
+       87	         3176 	
+       88	         3129 	
+       89	         3196 	
+       90	         3129 	
+       91	         3211 	
+       92	         3089 	
+       93	         3258 	
+       94	         3104 	
+       95	         3106 	
+       96	         3207 	
+       97	         3256 	
+       98	         3215 	
+       99	         3217 	
+      100	         3207 	

@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	20:59:11
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         2141 	
+        2	         2043 	
+        3	         2020 	
+        4	         2050 	
+        5	         1968 	
+        6	         1938 	
+        7	         2082 	
+        8	         2112 	
+        9	         1955 	
+       10	         2046 	
+       11	         2003 	
+       12	         2061 	
+       13	         2102 	
+       14	         2078 	
+       15	         2007 	
+       16	         2020 	
+       17	         2083 	
+       18	         2019 	
+       19	         1997 	
+       20	         2008 	
+       21	         2105 	
+       22	         2082 	
+       23	         1951 	
+       24	         2118 	
+       25	         2015 	
+       26	         2012 	
+       27	         1956 	
+       28	         2090 	
+       29	         2081 	
+       30	         2110 	
+       31	         2089 	
+       32	         2073 	
+       33	         2062 	
+       34	         2090 	
+       35	         2006 	
+       36	         2029 	
+       37	         1987 	
+       38	         2077 	
+       39	         2012 	
+       40	         2009 	
+       41	         2070 	
+       42	         2108 	
+       43	         2119 	
+       44	         2028 	
+       45	         2099 	
+       46	         2001 	
+       47	         2023 	
+       48	         2018 	
+       49	         1997 	
+       50	         2047 	
+       51	         2055 	
+       52	         2054 	
+       53	         2026 	
+       54	         2075 	
+       55	         2083 	
+       56	         2033 	
+       57	         2099 	
+       58	         2041 	
+       59	         2058 	
+       60	         2024 	
+       61	         2039 	
+       62	         2000 	
+       63	         1964 	
+       64	         2000 	
+       65	         2046 	
+       66	         2054 	
+       67	         2132 	
+       68	         2100 	
+       69	         2039 	
+       70	         2118 	
+       71	         1993 	
+       72	         2074 	
+       73	         2134 	
+       74	         2093 	
+       75	         2083 	
+       76	         2101 	
+       77	         2064 	
+       78	         2071 	
+       79	         2038 	
+       80	         2119 	
+       81	         2099 	
+       82	         2049 	
+       83	         2029 	
+       84	         2059 	
+       85	         2046 	
+       86	         2094 	
+       87	         2089 	
+       88	         2083 	
+       89	         1973 	
+       90	         2084 	
+       91	         2046 	
+       92	         2098 	
+       93	         2016 	
+       94	         2100 	
+       95	         2144 	
+       96	         1934 	
+       97	         1991 	
+       98	         2083 	
+       99	         2022 	
+      100	         1943 	

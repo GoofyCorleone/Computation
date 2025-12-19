@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	21:00:25
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         1827 	
+        2	         1831 	
+        3	         1882 	
+        4	         1985 	
+        5	         1922 	
+        6	         1881 	
+        7	         1897 	
+        8	         1849 	
+        9	         1934 	
+       10	         1880 	
+       11	         1909 	
+       12	         1865 	
+       13	         1887 	
+       14	         1864 	
+       15	         1917 	
+       16	         1889 	
+       17	         1931 	
+       18	         1826 	
+       19	         1899 	
+       20	         1932 	
+       21	         1924 	
+       22	         1865 	
+       23	         1896 	
+       24	         1904 	
+       25	         1907 	
+       26	         1892 	
+       27	         1888 	
+       28	         1885 	
+       29	         1937 	
+       30	         1938 	
+       31	         1881 	
+       32	         1907 	
+       33	         1949 	
+       34	         2006 	
+       35	         1876 	
+       36	         1952 	
+       37	         1933 	
+       38	         1891 	
+       39	         1824 	
+       40	         1921 	
+       41	         1974 	
+       42	         1830 	
+       43	         1951 	
+       44	         1866 	
+       45	         1952 	
+       46	         1959 	
+       47	         1942 	
+       48	         1957 	
+       49	         1892 	
+       50	         1816 	
+       51	         2041 	
+       52	         1962 	
+       53	         1955 	
+       54	         1871 	
+       55	         1951 	
+       56	         1929 	
+       57	         1848 	
+       58	         1911 	
+       59	         1896 	
+       60	         1863 	
+       61	         1831 	
+       62	         1881 	
+       63	         1876 	
+       64	         1953 	
+       65	         1946 	
+       66	         1875 	
+       67	         1958 	
+       68	         1944 	
+       69	         1950 	
+       70	         1819 	
+       71	         1883 	
+       72	         1909 	
+       73	         1976 	
+       74	         1909 	
+       75	         1936 	
+       76	         1880 	
+       77	         1964 	
+       78	         1840 	
+       79	         1857 	
+       80	         1867 	
+       81	         1834 	
+       82	         1882 	
+       83	         1928 	
+       84	         1845 	
+       85	         1955 	
+       86	         1880 	
+       87	         1921 	
+       88	         1932 	
+       89	         1839 	
+       90	         1787 	
+       91	         1958 	
+       92	         1907 	
+       93	         1931 	
+       94	         1857 	
+       95	         1913 	
+       96	         1852 	
+       97	         1903 	
+       98	         1962 	
+       99	         1898 	
+      100	         1853 	

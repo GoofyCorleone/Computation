@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	20:54:26
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         1816 	
+        2	         1906 	
+        3	         1875 	
+        4	         1795 	
+        5	         1913 	
+        6	         1852 	
+        7	         1830 	
+        8	         1869 	
+        9	         1929 	
+       10	         1839 	
+       11	         1821 	
+       12	         1887 	
+       13	         1825 	
+       14	         1811 	
+       15	         1873 	
+       16	         1851 	
+       17	         1881 	
+       18	         1801 	
+       19	         1851 	
+       20	         1819 	
+       21	         1887 	
+       22	         1820 	
+       23	         1874 	
+       24	         1933 	
+       25	         1834 	
+       26	         1944 	
+       27	         1923 	
+       28	         1796 	
+       29	         1911 	
+       30	         1864 	
+       31	         1839 	
+       32	         1847 	
+       33	         1801 	
+       34	         1917 	
+       35	         1843 	
+       36	         1866 	
+       37	         1870 	
+       38	         1905 	
+       39	         1845 	
+       40	         1914 	
+       41	         1754 	
+       42	         1830 	
+       43	         1866 	
+       44	         1834 	
+       45	         1865 	
+       46	         1917 	
+       47	         1870 	
+       48	         1787 	
+       49	         1875 	
+       50	         1875 	
+       51	         1833 	
+       52	         1860 	
+       53	         1783 	
+       54	         1922 	
+       55	         1802 	
+       56	         1815 	
+       57	         1865 	
+       58	         1778 	
+       59	         1837 	
+       60	         1881 	
+       61	         1797 	
+       62	         1822 	
+       63	         1882 	
+       64	         1852 	
+       65	         1798 	
+       66	         1866 	
+       67	         1826 	
+       68	         1838 	
+       69	         1803 	
+       70	         1724 	
+       71	         1936 	
+       72	         1818 	
+       73	         1817 	
+       74	         1894 	
+       75	         1846 	
+       76	         1954 	
+       77	         1874 	
+       78	         1820 	
+       79	         1865 	
+       80	         1774 	
+       81	         1866 	
+       82	         1846 	
+       83	         1857 	
+       84	         1906 	
+       85	         1735 	
+       86	         1820 	
+       87	         1814 	
+       88	         1892 	
+       89	         1828 	
+       90	         1943 	
+       91	         1896 	
+       92	         1836 	
+       93	         1860 	
+       94	         1815 	
+       95	         1875 	
+       96	         1802 	
+       97	         1840 	
+       98	         1780 	
+       99	         1849 	
+      100	         1851 	

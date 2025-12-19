@@ -1,0 +1,123 @@
+Thorlabs Single Photon Counter Data Export
+
+Date (YYYY-MM-DD):	2024-07-05
+Time (HH:MM:SS):	20:49:52
+Device Name:	SPCM50A
+Serial Number:	M00296614
+GUI Revision:	1.0 Build 23
+Driver Revision:	1.1.0
+Firmware Revision:	1.0.0
+
+Application settings:
+Operating Mode:	Free Running Timed Counter
+Bin Length [ms]:	100
+Time between Bins [ms]:	0.001
+Pulse Blind Time [ns]:	0
+Trigger Edge:	non-applicable
+Array Measurement:	Yes
+Array Measurement Continuously:	No
+Bins per Array:	100
+Active APD Gating:	No
+Fan Off:	No
+
+Bin Number 	Counts per Bin 	Remarks
+        1	         2678 	
+        2	         2467 	
+        3	         2642 	
+        4	         2761 	
+        5	         2661 	
+        6	         2627 	
+        7	         2520 	
+        8	         2663 	
+        9	         2547 	
+       10	         2651 	
+       11	         2600 	
+       12	         2536 	
+       13	         2558 	
+       14	         2609 	
+       15	         2628 	
+       16	         2697 	
+       17	         2544 	
+       18	         2504 	
+       19	         2583 	
+       20	         2626 	
+       21	         2593 	
+       22	         2583 	
+       23	         2577 	
+       24	         2573 	
+       25	         2687 	
+       26	         2572 	
+       27	         2557 	
+       28	         2615 	
+       29	         2619 	
+       30	         2761 	
+       31	         2511 	
+       32	         2546 	
+       33	         2670 	
+       34	         2666 	
+       35	         2563 	
+       36	         2596 	
+       37	         2660 	
+       38	         2686 	
+       39	         2698 	
+       40	         2657 	
+       41	         2597 	
+       42	         2652 	
+       43	         2747 	
+       44	         2609 	
+       45	         2564 	
+       46	         2710 	
+       47	         2688 	
+       48	         2659 	
+       49	         2629 	
+       50	         2685 	
+       51	         2569 	
+       52	         2628 	
+       53	         2569 	
+       54	         2589 	
+       55	         2541 	
+       56	         2586 	
+       57	         2688 	
+       58	         2612 	
+       59	         2704 	
+       60	         2634 	
+       61	         2575 	
+       62	         2573 	
+       63	         2611 	
+       64	         2666 	
+       65	         2595 	
+       66	         2645 	
+       67	         2647 	
+       68	         2636 	
+       69	         2597 	
+       70	         2635 	
+       71	         2727 	
+       72	         2678 	
+       73	         2529 	
+       74	         2566 	
+       75	         2756 	
+       76	         2584 	
+       77	         2634 	
+       78	         2704 	
+       79	         2588 	
+       80	         2573 	
+       81	         2616 	
+       82	         2523 	
+       83	         2699 	
+       84	         2551 	
+       85	         2639 	
+       86	         2621 	
+       87	         2678 	
+       88	         2674 	
+       89	         2613 	
+       90	         2594 	
+       91	         2649 	
+       92	         2717 	
+       93	         2621 	
+       94	         2649 	
+       95	         2612 	
+       96	         2625 	
+       97	         2681 	
+       98	         2663 	
+       99	         2645 	
+      100	         2518 	
