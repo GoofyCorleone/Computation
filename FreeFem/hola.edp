@@ -1,0 +1,20 @@
+// Test básico de FreeFem++
+mesh Th = square(10, 10);
+fespace Vh(Th, P1);
+
+Vh u, v;
+
+func f = 1.0; // Función fuente
+func g = 0.0; // Condición de frontera
+
+problem Poisson(u, v) =
+    int2d(Th)(dx(u)*dx(v) + dy(u)*dy(v))
+  - int2d(Th)(f*v)
+  + on(1, 2, 3, 4, u=g);
+
+Poisson;
+
+plot(u, fill=true, value=true, wait=true);
+
+cout << "¡Configuración exitosa!" << endl;
+cout << "Valor máximo de u: " << u[].max << endl;

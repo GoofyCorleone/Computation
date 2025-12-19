@@ -1,0 +1,243 @@
+// =====================
+// Parametros geometricos
+// =====================
+real W = 3.0;
+real H = 2.0;
+real gap = 0.3;
+
+real x0 = gap;
+real x1 = W - gap;
+real y0 = gap;
+real y1 = H - gap;
+
+// Definición de las dos aperturas en el costado izquierdo
+real lenSpecial = H / 5.0;
+real centerSpecial1 = 0.65 * H;
+real centerSpecial2 = 0.35 * H;
+
+real yStart1 = centerSpecial1 - lenSpecial / 2.0;
+real yEnd1   = centerSpecial1 + lenSpecial / 2.0;
+
+real yStart2 = centerSpecial2 - lenSpecial / 2.0;
+real yEnd2   = centerSpecial2 + lenSpecial / 2.0;
+
+// Definición de las dos salidas en el costado derecho
+real lenOut = H / 5.0;
+real centerOut1 = 0.65 * H;
+real centerOut2 = 0.35 * H;
+
+real yStartOut1 = centerOut1 - lenOut / 2.0;
+real yEndOut1   = centerOut1 + lenOut / 2.0;
+
+real yStartOut2 = centerOut2 - lenOut / 2.0;
+real yEndOut2   = centerOut2 + lenOut / 2.0;
+
+
+// =====================
+// Bordes exterior (tubería)
+// =====================
+border Obottom(t=0,1){ x = t*W; y = 0; label = 2; }
+border Otop(t=0,1)   { x = W - t*W; y = H; label = 4; }
+
+// Bordes izquierdos con aperturas
+border OleftTop(t=0,1)     { x = 0; y = H - t*(H - yEnd1); label = 3; }
+border OleftInlet1(t=0,1)  { x = 0; y = yEnd1 - t*(yEnd1 - yStart1); label = 10; }
+border OleftMid(t=0,1)     { x = 0; y = yStart1 - t*(yStart1 - yEnd2); label = 3; }
+border OleftInlet2(t=0,1)  { x = 0; y = yEnd2 - t*(yEnd2 - yStart2); label = 11; }
+border OleftBottom(t=0,1)  { x = 0; y = yStart2 - t*(yStart2 - 0); label = 3; }
+
+// Bordes derechos con salidas
+border OrightBottom(t=0,1)  { x = W; y = 0 + t*(yStartOut2 - 0); label = 3; }
+border OrightOutlet2(t=0,1) { x = W; y = yStartOut2 + t*(yEndOut2 - yStartOut2); label = 21; }
+border OrightMid(t=0,1)     { x = W; y = yEndOut2 + t*(yStartOut1 - yEndOut2); label = 3; }
+border OrightOutlet1(t=0,1) { x = W; y = yStartOut1 + t*(yEndOut1 - yStartOut1); label = 20; }
+border OrightTop(t=0,1)     { x = W; y = yEndOut1 + t*(H - yEndOut1); label = 3; }
+
+// =====================
+// Bordes interior (tablero)
+// =====================
+border Ibottom(t=0,1){ x = x0 + t*(x1 - x0); y = y0; label = 1; }
+border Iright(t=0,1) { x = x1; y = y0 + t*(y1 - y0); label = 1; }
+border Itop(t=0,1)   { x = x1 - t*(x1 - x0); y = y1; label = 1; }
+border Ileft(t=0,1)  { x = x0; y = y1 - t*(y1 - y0); label = 1; }
+
+// =====================
+// Mallas
+// =====================
+int nSegPerEdgeInner = 60;
+mesh meshInner = buildmesh(Ibottom(nSegPerEdgeInner) + Iright(nSegPerEdgeInner)
+                          + Itop(nSegPerEdgeInner) + Ileft(nSegPerEdgeInner));
+
+plot(meshInner, wait=true);
+
+int nSegBottom = 120;
+int nSegTop    = 120;
+
+int nSegLeftTop = 20;
+int nSegLeftInlet1 = 20;
+int nSegLeftMid = 20;
+int nSegLeftInlet2 = 20;
+int nSegLeftBottom = 20;
+
+int nSegRightTop = 20;
+int nSegRightOutlet1 = 20;
+int nSegRightMid = 20;
+int nSegRightOutlet2 = 20;
+int nSegRightBottom = 20;
+
+
+mesh meshFrame = buildmesh(
+      Obottom(nSegBottom)
+    + OrightBottom(nSegRightBottom)
+    + OrightOutlet2(nSegRightOutlet2)
+    + OrightMid(nSegRightMid)
+    + OrightOutlet1(nSegRightOutlet1)
+    + OrightTop(nSegRightTop)
+    + Otop(nSegTop)
+    + OleftTop(nSegLeftTop)
+    + OleftInlet1(nSegLeftInlet1)
+    + OleftMid(nSegLeftMid)
+    + OleftInlet2(nSegLeftInlet2)
+    + OleftBottom(nSegLeftBottom)
+    + Ibottom(-nSegPerEdgeInner)
+    + Iright(-nSegPerEdgeInner)
+    + Itop(-nSegPerEdgeInner)
+    + Ileft(-nSegPerEdgeInner)
+);
+
+
+plot(meshFrame, wait=true);
+
+mesh meshCombined = meshFrame + meshInner;
+plot(meshCombined, wait=true);
+
+// =====================
+// Espacios finitos
+// =====================
+// Velocidad y presión se quedan en meshFrame
+fespace Vh(meshFrame, P2); // velocidad
+fespace Qh(meshFrame, P1); // presion
+
+fespace VhCombined(meshCombined, P2);
+VhCombined u1Combined, u2Combined;
+
+fespace Th(meshCombined, P1); // temperatura (ambas, pero activadas con chiFrame/chiInner)
+
+// =====================
+// Variables
+// =====================
+Vh u1, u2, v1, v2;
+Qh p, q;
+Vh u1old, u2old;
+
+Th Tf, TfOld, phi;   // temperatura exterior (funciona como campo 'exterior' pero definido en meshCombined)
+Th Ti, TiOld, psi;   // temperatura interior (igual, definido en meshCombined)
+
+Th Tcombined; // campo combinado para visualización
+
+// =====================
+// Parametros fisicos y numericos
+// =====================
+real dt = 0.1; // 0.01
+int nSteps = 200;
+
+real Re = 100.0;
+int nPicard = 5;
+real picardRelax = 1.0;
+
+real Uin = 1.0;
+real Tin = 1.0;
+
+// =====================
+// Inicializaciones
+// =====================
+u1old = 0.0; u2old = 0.0;
+TfOld = 0.0;
+TiOld = .3;
+
+// Mascara para subdominios (funciones en todo meshCombined)
+func chiInner = ((x > x0) && (x < x1) && (y > y0) && (y < y1)) ? 1.0 : 0.0;
+func chiFrame = 1.0 - chiInner;
+
+real alpha = 10.0;
+
+// =====================
+// Bucle temporal
+// =====================
+for (int it = 0; it < nSteps; it++) {
+
+    // --- Navier-Stokes (fluido) sobre meshFrame ---
+    for (int k = 0; k < nPicard; k++) {
+        problem NS([u1,u2,p],[v1,v2,q]) =
+            int2d(meshFrame)( (1.0/dt)*(u1*v1 + u2*v2) )
+          - int2d(meshFrame)( (1.0/dt)*(u1old*v1 + u2old*v2) )
+          + int2d(meshFrame)(
+                (dx(u1)*dx(v1) + dy(u1)*dy(v1)
+               + dx(u2)*dx(v2) + dy(u2)*dy(v2)) / Re
+            )
+          + int2d(meshFrame)(
+                (u1old*dx(u1) + u2old*dy(u1)) * v1
+              + (u1old*dx(u2) + u2old*dy(u2)) * v2
+            )
+          - int2d(meshFrame)( p*(dx(v1) + dy(v2)) )
+          - int2d(meshFrame)( q*(dx(u1) + dy(u2)) )
+          + on(10, u1 = Uin, u2 = 0.0)
+          + on(11, u1 = Uin, u2 = 0.0)
+          + on(2,3,4,1, u1 = 0.0, u2 = 0.0);
+        NS;
+
+        u1old = (1.0 - picardRelax)*u1old + picardRelax*u1;
+        u2old = (1.0 - picardRelax)*u2old + picardRelax*u2;
+    }
+
+    // --- Problema térmico UNIFICADO (una sola solve) ---
+    // Tf y Ti están definidas en meshCombined, activamos términos con chiFrame/chiInner
+    problem heat([Tf, Ti], [phi, psi], solver=CG) =
+        // términos para Tf (exterior) activados con chiFrame
+        int2d(meshCombined)( chiFrame*(1.0/dt) * Tf * phi )
+      - int2d(meshCombined)( chiFrame*(1.0/dt) * TfOld * phi )
+      + int2d(meshCombined)( chiFrame*(dx(Tf)*dx(phi) + dy(Tf)*dy(phi)) )
+      + int2d(meshCombined)( chiFrame*(u1*dx(Tf) + u2*dy(Tf)) * phi )
+
+        // términos para Ti (interior) activados con chiInner
+      + int2d(meshCombined)( chiInner*(1.0/dt) * Ti * psi )
+      - int2d(meshCombined)( chiInner*(1.0/dt) * TiOld * psi )
+      + int2d(meshCombined)( chiInner*0.5*(dx(Ti)*dx(psi) + dy(Ti)*dy(psi)))
+
+        // acoplamiento en la frontera interior con label 1
+      + int1d(meshCombined, 1)( alpha*(Tf - Ti)*phi)
+      + int1d(meshCombined, 1)( alpha*(Ti - Tf)*psi )
+
+        // boundary@ conditions: mismos labels 10 y 11 aplican a la parte exterior (chiFrame)
+      + on(10, Tf = Tin) + on(11, Tf = Tin);
+    heat;
+    TfOld = Tf;
+    TiOld = Ti;
+
+    // --- Combinar para visualización ---
+    Tcombined = chiFrame * Tf + chiInner * Ti;
+
+    // --- Interpolar velocidad en meshCombined para graficar (solo visual) ---
+    // Creamos u1Combined,u2Combined en VhCombined (definido arriba) y usamos asignación
+
+    // FreeFem interpola automáticamente una función de una malla a otra al hacer una
+    // simple asignación entre espacios finitos diferentes.
+    u1Combined = u1;
+    u2Combined = u2;
+
+    //plot([u1Combined, u2Combined],
+    //    cmm = "Velocidad t = " + it, value = true, wait = false);
+    //plot(p, value=true, wait=false, fill=true);
+    // --- Temperatura combinada (visual) ---
+    plot(meshCombined, Tcombined, value = true, fill = true,
+        cmm = "Temperatura t = " + it, wait = false);
+}
+
+// =====================
+// Plots finales =)
+// =====================
+plot(meshFrame, u1, u2, wait = true,
+     cmm = "velocidad exterior final vector");
+
+plot(meshCombined, Tcombined, value = true, fill = true, wait = true,
+     cmm = "temperatura combinada final");
