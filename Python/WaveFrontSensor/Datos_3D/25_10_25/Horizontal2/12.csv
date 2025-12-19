@@ -1,0 +1,122 @@
+Thorlabs Shack-Hartmann Wavefront Sensor
+
+Model                  ,       WFS150-5C
+Serial Number          ,       M00303913
+
+Date MM-DD-YYYY        ,       10-25-2025
+Time HH:MM:SS          ,       19:46:13
+
+
+*** CAMERA ***
+Camera Type            ,       Thorlabs DCU224M
+Camera SN              ,       4102714222
+Resolution X           ,       768
+Resolution Y           ,       768
+Exposure Time [ms]     ,      24.511
+Master Gain            ,       1.000
+Averages               ,       1
+Average Type           ,       Normal
+
+
+*** BEAM ***
+Beam Center X [mm]     ,       0.618
+Beam Center Y [mm]     ,      -0.073
+Beam Diameter X [mm]   ,       2.693
+Beam Diameter Y [mm]   ,       3.278
+
+
+*** PUPIL ***
+Circular               ,       1
+Use Beam Centroid      ,       1
+Use Beam Dia           ,       0
+Wavefront Calc In Pupil,       0
+Pupil Diameter X [mm]  ,       3.000
+Pupil Diameter Y [mm]  ,       3.000
+Pupil Center X [mm]    ,       0.618
+Pupil Center Y [mm]    ,      -0.073
+
+
+*** ZERNIKE FIT ***
+Zernike Orders Auto    ,       0
+Zernike Orders         ,       4
+Zernike Modes          ,       15
+Unit                   ,       µm
+Index  Order  Frequency  Coefficient
+   1,     0,     0,       65.030
+   2,     1,    -1,      -16.305
+   3,     1,     1,      -24.209
+   4,     2,    -2,       -0.862
+   5,     2,     0,      -24.720
+   6,     2,     2,       -0.546
+   7,     3,    -3,        0.112
+   8,     3,    -1,        0.403
+   9,     3,     1,        0.145
+  10,     3,     3,       -0.265
+  11,     4,    -4,        0.243
+  12,     4,    -2,       -0.019
+  13,     4,     0,        0.764
+  14,     4,     2,        0.173
+  15,     4,     4,        0.056
+
+Fit Error Mean [arcmin]  ,   1.208e-09
+Fit Error StdDev [arcmin],   5.174e-03
+
+
+*** RMS WAVEFRONT VARIATIONS ***
+Unit                   ,       µm
+Order  Variation
+   0,     65.030
+   1,     29.188
+   2,     24.741
+   3,      0.516
+   4,      0.823
+
+
+*** FOURIER NOTATION ***
+Fourier Order          ,       2
+Fourier M              ,      76.118
+Fourier J0             ,       1.189
+Fourier J45            ,       1.876
+
+
+*** OPTOMETRIC NOTATION ***
+Optometric Sphere [dpt],      78.339
+Optometric Cyl. [dpt]  ,      -4.442
+Optometric Axis [deg]  ,      28.822
+
+Radius of Curvature[mm],      13.137
+
+
+*** WAVEFRONT ***
+Reference              ,       Internal Reference
+Unit                   ,       µm
+Wavelength [nm]        ,        633.000
+Type                   ,       Measured
+Calculation Area       ,       entire area
+PV                     ,     125.586
+RMS                    ,      26.375
+RMS weighted           ,      20.998
+Spots X                ,       21
+Spots Y                ,       21
+y / x [mm],    -1.500,    -1.350,    -1.200,    -1.050,    -0.900,    -0.750,    -0.600,    -0.450,    -0.300,    -0.150,     0.000,     0.150,     0.300,     0.450,     0.600,     0.750,     0.900,     1.050,     1.200,     1.350,     1.500,
+     1.500,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,
+     1.350,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,
+     1.200,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -40.605,   -37.337,   -35.059,   -34.977,   -36.456,   -39.465,   -43.945,   -49.939,   -58.305,   -68.057,   -79.278,       NaN,
+     1.050,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -30.819,   -26.795,   -24.409,   -24.331,   -25.776,   -28.721,   -33.454,   -39.647,   -48.008,   -57.951,   -70.002,       NaN,
+     0.900,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -40.641,   -33.404,   -27.013,   -21.708,   -17.801,   -15.651,   -15.429,   -16.997,   -19.932,   -24.870,   -31.359,   -39.676,   -49.832,   -61.997,       NaN,
+     0.750,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -34.819,   -27.150,   -20.057,   -14.233,   -10.315,    -8.334,    -8.053,    -9.674,   -12.871,   -17.950,   -24.571,   -33.040,   -43.340,   -55.451,       NaN,
+     0.600,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -29.979,   -21.877,   -14.334,    -8.489,    -4.586,    -2.621,    -2.311,    -3.909,    -7.397,   -12.643,   -19.402,   -27.912,   -38.516,   -50.840,       NaN,
+     0.450,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -25.853,   -17.560,   -10.227,    -4.734,    -0.764,     1.309,     1.491,    -0.045,    -3.426,    -8.750,   -15.884,   -24.476,   -35.109,   -47.810,       NaN,
+     0.300,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -23.567,   -15.065,    -7.870,    -2.615,     1.323,     3.465,     3.544,     1.743,    -1.608,    -6.817,   -14.004,   -22.732,   -33.671,   -46.457,       NaN,
+     0.150,       NaN,   -72.990,   -62.822,   -52.291,   -42.038,   -31.955,   -23.155,   -14.485,    -7.361,    -2.178,     1.592,     3.601,     3.856,     2.186,    -1.295,    -6.600,   -13.814,   -22.640,   -33.838,   -46.813,       NaN,
+     0.000,       NaN,   -74.228,   -64.034,   -53.810,   -43.724,   -33.785,   -24.156,   -15.437,    -8.440,    -3.383,     0.000,     2.014,     2.375,     0.851,    -2.694,    -8.151,   -15.256,   -24.328,   -35.763,   -49.203,       NaN,
+    -0.150,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -18.436,   -11.549,    -6.567,    -3.275,    -1.261,    -1.018,    -2.499,    -5.924,   -11.514,   -18.658,   -27.795,   -38.538,   -52.074,       NaN,
+    -0.300,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -23.408,   -16.406,   -11.610,    -8.164,    -6.276,    -6.040,    -7.547,   -10.756,   -16.282,   -23.583,   -33.000,   -43.502,   -56.724,       NaN,
+    -0.450,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -30.250,   -23.063,   -18.215,   -14.603,   -12.939,   -12.752,   -14.142,   -17.250,   -22.751,   -30.294,   -40.061,   -51.037,   -64.028,       NaN,
+    -0.600,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -37.902,   -31.204,   -26.332,   -22.585,   -20.999,   -20.964,   -22.390,   -25.941,   -31.535,   -39.224,   -48.942,   -60.200,   -73.429,       NaN,
+    -0.750,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -47.198,   -40.937,   -36.028,   -32.407,   -30.806,   -31.047,   -32.564,   -36.125,   -41.601,   -49.465,   -59.418,   -70.999,   -84.499,       NaN,
+    -0.900,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -57.920,   -52.051,   -47.293,   -44.041,   -42.711,   -43.117,   -44.732,   -48.346,   -53.785,   -61.359,   -71.340,   -83.149,   -96.659,       NaN,
+    -1.050,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -64.259,   -60.059,   -57.319,   -56.454,   -57.017,   -58.812,   -62.569,   -67.788,   -74.727,   -84.556,   -96.454,  -109.727,       NaN,
+    -1.200,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -77.844,   -74.305,   -71.372,   -70.479,   -71.619,   -74.077,   -78.191,   -83.196,   -90.665,   -99.855,  -110.478,  -121.730,       NaN,
+    -1.350,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,   -92.328,   -88.617,   -85.641,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,
+    -1.500,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,       NaN,
