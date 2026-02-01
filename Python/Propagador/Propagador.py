@@ -507,7 +507,7 @@ def main(parametros = []):
             x_range_mm=(-5, 5),
             y_range_mm=(-5, 5),
             resolucion_2d=parametros[5],
-            guardar_imagen=True
+            guardar_imagen=False
             )
     else:
         lambda_, ancho_x, ancho_y , z = parametros[0], parametros[1], parametros[2], parametros[4]
@@ -522,14 +522,14 @@ def main(parametros = []):
             x_range_mm=(-5, 5),
             y_range_mm=(-5, 5),
             resolucion_2d=parametros[5],
-            guardar_imagen=True
+            guardar_imagen=False
             )
     
 lambda_ = 632.8e-9
 ancho_x = 1.0e-3
 ancho_y = 0.5e-3
 z = 8.89e-1
-resolucion = 80
+resolucion = 160
 parametros = [lambda_,ancho_x,ancho_y,False,z, resolucion]
 
 main(parametros=parametros)
