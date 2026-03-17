@@ -1,0 +1,5 @@
+numpy==2.4.3
+Pillow==12.1.1
+matplotlib==3.10.8
+opencv-python==4.13.0.92
+pyueye==4.96.952

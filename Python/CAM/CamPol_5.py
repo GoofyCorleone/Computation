@@ -21,17 +21,24 @@ OUTPUT_DIR = 'resultados_polarimetria'
 
 def load_images(file_paths: dict) -> dict:
     """
-    Carga imágenes TIFF y las retorna como arrays float64.
+    Carga imágenes TIFF y las retorna como arrays float64 normalizados a [0, 1].
+    La normalización usa el máximo teórico del bit-depth para preservar la
+    escala relativa entre imágenes (necesaria para el cálculo de Stokes).
     Si son RGB, convierte a escala de grises promediando canales.
     """
     imgs = {}
     for name, path in file_paths.items():
-        img = np.array(Image.open(path)).astype(np.float64)
+        raw = np.array(Image.open(path))
+        if np.issubdtype(raw.dtype, np.integer):
+            max_val = np.iinfo(raw.dtype).max
+        else:
+            max_val = 1.0
+        img = raw.astype(np.float64) / max_val
         if len(img.shape) == 3:
             img = np.mean(img, axis=2)
         imgs[name] = img
         print(f"  {name}: shape={img.shape}, dtype={img.dtype}, "
-              f"min={img.min():.2f}, max={img.max():.2f}")
+              f"min={img.min():.4f}, max={img.max():.4f}")
     return imgs
 
 
