@@ -9,8 +9,8 @@ Replica la configuración de la Tabla 4 de la tesis de Silva-Lora (2024):
 Genera visualizaciones 2D y 3D (Figs. 11-12 de la tesis).
 
 Uso:
-    python ejemplo_lsoe.py              # sin STL
-    python ejemplo_lsoe.py --stl        # exporta STL recortado
+    python ejemplo_lsoe.py              # con STL (por defecto)
+    python ejemplo_lsoe.py --no-stl     # sin exportar STL
 """
 
 import sys
@@ -26,7 +26,7 @@ from gots import (
 
 
 def main():
-    exportar_stl = '--stl' in sys.argv
+    exportar_stl = '--no-stl' not in sys.argv
 
     # --- Parámetros de la Tabla 4 ---
     zeta_0 = 80.0
@@ -121,7 +121,7 @@ def main():
         size_kb = os.path.getsize(stl_path) / 1024
         print(f"\nSTL exportado: {stl_path} ({size_kb:.1f} KB)")
     else:
-        print("\n(Usar --stl para exportar la lente a STL)")
+        print("\n(STL deshabilitado con --no-stl)")
 
     # --- LSOE con factor de forma ---
     print("\n=== LSOE con factor de forma σ ===")
