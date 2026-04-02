@@ -18,12 +18,18 @@ class ParametrosGOTS:
     T_k: parámetro de familia de ovoides (1/longitud³)
     S_k: parámetro de restricción, S² = G·O·T
     zeta_k: posición axial del vértice
+    OG_k: producto O_k·G_k (siempre finito, incluso cuando O_k=0)
     """
     G_k: float
     O_k: float
     T_k: float
     S_k: float
     zeta_k: float
+    OG_k: float = 0.0
+
+    def __post_init__(self):
+        if self.OG_k == 0.0 and abs(self.O_k) > 1e-30:
+            self.OG_k = self.O_k * self.G_k
 
     def verificar(self, tol=1e-6):
         """Verifica la restricción S² = G·O·T."""
@@ -64,8 +70,13 @@ def calcular_gots(n_k, n_k1, zeta_k, d_k, d_k1):
     # S_k  (Eq. 13)
     S_k = (n_k1 + n_k) * (n_k1**2 * eta - n_k**2 * xi) / (2 * n_k * n_k1 * xi * eta * kappa)
 
-    # G_k  (Eq. 10) = (O_k·G_k) / O_k
-    OG = (n_k1**2 * eta - n_k**2 * xi)**2 / (n_k * n_k1 * xi * eta * (n_k1 - n_k) * kappa)
-    G_k = OG / O_k
+    # O_k·G_k  (Eq. 10)
+    OG_k = (n_k1**2 * eta - n_k**2 * xi)**2 / (n_k * n_k1 * xi * eta * (n_k1 - n_k) * kappa)
 
-    return ParametrosGOTS(G_k=G_k, O_k=O_k, T_k=T_k, S_k=S_k, zeta_k=zeta_k)
+    # G_k = OG / O_k (puede ser inf si O_k = 0, superficie plana)
+    if abs(O_k) > 1e-30:
+        G_k = OG_k / O_k
+    else:
+        G_k = float('inf')
+
+    return ParametrosGOTS(G_k=G_k, O_k=O_k, T_k=T_k, S_k=S_k, zeta_k=zeta_k, OG_k=OG_k)

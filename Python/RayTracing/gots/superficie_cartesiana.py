@@ -24,11 +24,12 @@ class SuperficieCartesiana:
         self.T = params.T_k
         self.S = params.S_k
         self.zeta = params.zeta_k
+        self.OG = params.OG_k
         self.n_k = n_k
         self.n_k1 = n_k1
 
-        # Coeficiente dentro del radical de Eq. 15: 2S - O²G
-        self._radical_coef = 2.0 * self.S - self.O**2 * self.G
+        # Coeficiente dentro del radical de Eq. 15: 2S - O²G = 2S - O·(OG)
+        self._radical_coef = 2.0 * self.S - self.O * self.OG
 
         # ρ_max: dominio máximo donde el radical es no-negativo
         # 1 + (2S - O²G)·ρ² ≥ 0  →  ρ² ≤ -1/(2S - O²G) si 2S-O²G < 0
@@ -90,8 +91,8 @@ class SuperficieCartesiana:
         # Eq. 64: ∂f/∂y = 2(O·y - 2S·τ·y + 2T·ρ²·y)
         dfdy = 2.0 * (self.O * y - 2.0 * self.S * tau * y + 2.0 * self.T * rho2 * y)
 
-        # Eq. 65: ∂f/∂z = 2(G·O·τ + O·τ - S·(2τ² + ρ²) + 2T·τ·ρ² - 1)
-        dfdz = 2.0 * (self.G * self.O * tau + self.O * tau
+        # Eq. 65: ∂f/∂z = 2(OG·τ + O·τ - S·(2τ² + ρ²) + 2T·τ·ρ² - 1)
+        dfdz = 2.0 * (self.OG * tau + self.O * tau
                        - self.S * (2.0 * tau**2 + rho2)
                        + 2.0 * self.T * tau * rho2 - 1.0)
 

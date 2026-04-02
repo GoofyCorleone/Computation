@@ -14,7 +14,7 @@ def normalizar(v):
 def resolver_cuartica(Q4, Q3, Q2, Q1, Q0, tol_imag=1e-10):
     """Resuelve Q4*t^4 + Q3*t^3 + Q2*t^2 + Q1*t + Q0 = 0.
 
-    Retorna las raíces reales positivas ordenadas de menor a mayor.
+    Retorna todas las raíces reales ordenadas por valor absoluto (menor primero).
     Si Q4 ≈ 0 reduce a cúbica/cuadrática automáticamente.
     """
     # Construir vector de coeficientes eliminando ceros líderes
@@ -27,10 +27,12 @@ def resolver_cuartica(Q4, Q3, Q2, Q1, Q0, tol_imag=1e-10):
 
     raices = np.roots(coefs)
 
-    # Filtrar raíces reales positivas
+    # Filtrar raíces reales (positivas y negativas)
     reales = []
     for r in raices:
-        if abs(r.imag) < tol_imag and r.real > 1e-12:
+        if abs(r.imag) < tol_imag:
             reales.append(r.real)
 
-    return np.sort(np.array(reales))
+    # Ordenar por valor absoluto para que la raíz más cercana al vértice sea primero
+    reales.sort(key=abs)
+    return np.array(reales)

@@ -42,7 +42,7 @@ def coeficientes_cuartica(rayo, superficie):
     """
     ux, uy, uz = rayo.direccion
     xo, yo, zo = rayo.origen
-    G = superficie.G
+    OG = superficie.OG
     O = superficie.O
     T = superficie.T
     S = superficie.S
@@ -69,48 +69,12 @@ def coeficientes_cuartica(rayo, superficie):
         B = mx * bx + my * by
         C = bx**2 + by**2
 
-        # Ec. 52-56
-        Q4 = T * A**2
-        Q3 = (4.0 * T * A * B - 2.0 * S * A)
-        Q2 = (G * O + O * A + 2.0 * T * (4.0 * B**2 + 2.0 * A * C)
-               - 4.0 * S * B)
-        # Hmm, let me be more careful. From the thesis:
-        # ρ'² = A·τ² + 2B·τ + C as defined above
-        # (ρ'²)² = A²·τ⁴ + 4A·B·τ³ + (4B²+2AC)·τ² + 4BC·τ + C²
-        #
-        # Substituting into f = O·G·τ² - 2(1+S·ρ'²)τ + (O+T·ρ'²)·ρ'²:
-        # = O·G·τ² - 2τ - 2S·ρ'²·τ + O·ρ'² + T·(ρ'²)²
-        #
-        # τ⁴ coeff: T·A²
-        # τ³ coeff: 4T·A·B - 2S·A
-        # τ² coeff: O·G + T·(4B²+2AC) + O·A - 2S·2B  wait...
-        #   -2S·ρ'²·τ has τ² coeff: -2S·A  (from A·τ²·τ → that's τ³, not τ²)
-        #   Let me redo systematically:
-        #
-        # Term: O·G·τ²
-        #   τ² → O·G
-        #
-        # Term: -2τ
-        #   τ¹ → -2
-        #
-        # Term: -2S·ρ'²·τ = -2S·(A·τ² + 2B·τ + C)·τ
-        #   = -2S·A·τ³ - 4S·B·τ² - 2S·C·τ
-        #
-        # Term: O·ρ'² = O·(A·τ² + 2B·τ + C)
-        #   = O·A·τ² + 2O·B·τ + O·C
-        #
-        # Term: T·(ρ'²)² = T·(A²·τ⁴ + 4A·B·τ³ + (4B²+2AC)·τ² + 4BC·τ + C²)
-        #
-        # Collecting:
-        # τ⁴: T·A²
-        # τ³: 4T·A·B - 2S·A
-        # τ²: T·(4B²+2AC) - 4S·B + O·A + O·G
-        # τ¹: 4T·B·C - 2S·C + 2O·B - 2
-        # τ⁰: T·C² + O·C
-
+        # Coeficientes de la cuártica en τ (Ec. 52-56)
+        # f = OG·τ² - 2τ - 2S·ρ²·τ + O·ρ² + T·(ρ²)²
+        # con ρ² = A·τ² + 2B·τ + C
         Q4 = T * A**2
         Q3 = 4.0 * T * A * B - 2.0 * S * A
-        Q2 = T * (4.0 * B**2 + 2.0 * A * C) - 4.0 * S * B + O * A + O * G
+        Q2 = T * (4.0 * B**2 + 2.0 * A * C) - 4.0 * S * B + O * A + OG
         Q1 = 4.0 * T * B * C - 2.0 * S * C + 2.0 * O * B - 2.0
         Q0 = T * C**2 + O * C
 
@@ -139,37 +103,9 @@ def coeficientes_cuartica(rayo, superficie):
         D = xo * ux + yo * uy + tau0 * uz
         E = xo**2 + yo**2 + tau0**2
 
-        # τ(t) = τ0 + uz·t
-        # (ρ²)² = t⁴ + 4D·t³ + (4D²+2E)·t² + 4DE·t + E²
-        #
-        # Expanding f(t) and collecting powers of t:
-        # τ² = uz²·t² + 2τ0·uz·t + τ0²
-        # ρ²·τ = (t²+2D·t+E)·(τ0+uz·t) = uz·t³+(τ0+2D·uz)·t²+(2D·τ0+E·uz)·t+E·τ0
-
-        # τ⁰·τ⁴: T
-        # (organized as Q4·t⁴ + Q3·t³ + Q2·t² + Q1·t + Q0)
-
-        Q4 = T  # coeff de (ρ²)² en t⁴ es T·1 = T
-        Q3 = 4.0 * T * D - 2.0 * S * uz
-        Q2 = (T * (4.0 * D**2 + 2.0 * E) - 4.0 * S * D
-               + O + O * G * uz**2 - 2.0 * S * uz * 0)  # hmm let me redo
-
-        # Actually this gets complex. Let me just use a general approach:
-        # sample f(t) and find roots numerically via companion matrix.
-        # For uz ≈ 0 but not exactly 0, the tau-parametrization with large mx,my
-        # still works if we solve the quartic carefully.
-        # Let's handle by re-parametrizing with a small uz.
-        # Or better: just use the full expansion.
-
-        # Full expansion term by term:
-        # Term OG·τ²: OG·(τ0+uz·t)² = OG·uz²·t² + 2·OG·τ0·uz·t + OG·τ0²
-        # Term -2τ: -2·(τ0+uz·t) = -2·uz·t - 2·τ0
-        # Term -2S·ρ²·τ: -2S·(t²+2D·t+E)·(τ0+uz·t)
-        #   = -2S·[uz·t³ + (τ0+2D·uz)·t² + (2D·τ0+E·uz)·t + E·τ0]
-        # Term O·ρ²: O·(t²+2D·t+E)
-        # Term T·(ρ²)²: T·(t⁴ + 4D·t³ + (4D²+2E)·t² + 4DE·t + E²)
-
-        OG = O * G
+        # Coeficientes de la cuártica en t (expansión directa de f(t)=0)
+        # f = OG·(τ0+uz·t)² - 2(1+S·ρ²)·(τ0+uz·t) + (O+T·ρ²)·ρ²
+        # con ρ²(t) = t² + 2D·t + E
         Q4 = T
         Q3 = 4.0 * T * D - 2.0 * S * uz
         Q2 = (T * (4.0 * D**2 + 2.0 * E) - 2.0 * S * (tau0 + 2.0 * D * uz)
@@ -185,7 +121,7 @@ def intersectar(rayo, superficie, superficie_idx=0):
     """Encuentra la intersección entre un rayo y una superficie cartesiana.
 
     Resuelve la cuártica (Eq. 51) y selecciona la raíz física:
-    la menor τ (o t) positiva cuyo ρ ≤ ρ_max.
+    la raíz con menor |τ| (o t>0) cuyo ρ ≤ ρ_max y t_rayo > 0.
 
     Returns:
         Interseccion o None si no hay intersección válida.
@@ -214,6 +150,8 @@ def intersectar(rayo, superficie, superficie_idx=0):
                 continue
         else:  # param_tipo == 't'
             t = raiz
+            if t < 1e-12:
+                continue  # en esta parametrización t es el parámetro del rayo
             x = xo + ux * t
             y = yo + uy * t
             z = zo + uz * t

@@ -68,7 +68,6 @@ def main():
         puntos_imagen = []
         for r in resultados_eje:
             if r.rayo_completo:
-                # Extender último rayo hasta z = d_2
                 p_final = r.puntos[-1]
                 d_final = r.direcciones[-1]
                 if abs(d_final[2]) > 1e-12:
@@ -98,6 +97,7 @@ def main():
     graficar_seccion_transversal(sistema, todos_resultados,
                                   titulo='LSOE - Sección Transversal (Tabla 4)',
                                   colores_rayos=colores,
+                                  z_imagen=d_2,
                                   mostrar=True)
 
     # --- Visualización 3D ---
