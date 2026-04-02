@@ -7,6 +7,10 @@ Replica la configuración de la Tabla 4 de la tesis de Silva-Lora (2024):
 - d_0=0, d_1=400, d_2=200
 
 Genera visualizaciones 2D y 3D (Figs. 11-12 de la tesis).
+
+Uso:
+    python ejemplo_lsoe.py              # sin STL
+    python ejemplo_lsoe.py --stl        # exporta STL recortado
 """
 
 import sys
@@ -15,13 +19,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 from gots import (
-    SistemaOptico, SuperficieCartesiana, Rayo,
+    SistemaOptico, SuperficieCartesiana,
     calcular_gots, graficar_seccion_transversal, graficar_3d,
     exportar_sistema_stl
 )
 
 
 def main():
+    exportar_stl = '--stl' in sys.argv
+
     # --- Parámetros de la Tabla 4 ---
     zeta_0 = 80.0
     zeta_1 = 90.0
@@ -104,19 +110,24 @@ def main():
     print("=== Generando gráfica 3D (Fig. 11) ===")
     graficar_3d(sistema, todos_resultados,
                 titulo='LSOE - Vista 3D',
+                colores_rayos=colores,
+                z_imagen=d_2,
                 mostrar=True)
 
-    # --- Exportar STL ---
-    stl_path = os.path.join(os.path.dirname(__file__), 'lsoe.stl')
-    exportar_sistema_stl(sistema, stl_path)
-    size_kb = os.path.getsize(stl_path) / 1024
-    print(f"\nSTL exportado: {stl_path} ({size_kb:.1f} KB)")
+    # --- Exportar STL (opcional) ---
+    if exportar_stl:
+        stl_path = os.path.join(os.path.dirname(__file__), 'lsoe.stl')
+        exportar_sistema_stl(sistema, stl_path)
+        size_kb = os.path.getsize(stl_path) / 1024
+        print(f"\nSTL exportado: {stl_path} ({size_kb:.1f} KB)")
+    else:
+        print("\n(Usar --stl para exportar la lente a STL)")
 
     # --- LSOE con factor de forma ---
     print("\n=== LSOE con factor de forma σ ===")
     for sigma in [-1.0, -0.5, 0.0, 0.5, 1.0]:
         try:
-            sist, d1_calc = SistemaOptico.lsoe(
+            _, d1_calc = SistemaOptico.lsoe(
                 zeta_0=60, zeta_1=80, d_0=0, d_2=150,
                 n_0=1.0, n_1=1.7, n_2=1.0, sigma=sigma
             )

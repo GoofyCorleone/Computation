@@ -93,6 +93,42 @@ class SistemaOptico:
 
         return resultados
 
+    def encontrar_apertura(self):
+        """Encuentra la apertura (r_max) donde superficies consecutivas se interceptan.
+
+        Para cada par de superficies consecutivas, busca el ρ donde sus
+        perfiles z(ρ) se cruzan. Ese punto define el borde físico de la lente.
+
+        Returns:
+            Lista de r_max para cada par de superficies consecutivas.
+        """
+        aperturas = []
+        for k in range(len(self.superficies) - 1):
+            sup0 = self.superficies[k]
+            sup1 = self.superficies[k + 1]
+
+            rho_lim_0 = sup0.rho_max if np.isfinite(sup0.rho_max) else 200.0
+            rho_lim_1 = sup1.rho_max if np.isfinite(sup1.rho_max) else 200.0
+            rho_lim = min(rho_lim_0, rho_lim_1)
+
+            rho_test = np.linspace(0.01, rho_lim * 0.99, 2000)
+            z0 = sup0.z_de_rho(rho_test)
+            z1 = sup1.z_de_rho(rho_test)
+
+            diff = z0 - z1
+            cruces = np.where(np.diff(np.sign(diff)))[0]
+
+            if len(cruces) > 0:
+                idx = cruces[0]
+                f = abs(diff[idx]) / (abs(diff[idx]) + abs(diff[idx + 1]))
+                rho_cruce = rho_test[idx] + f * (rho_test[idx + 1] - rho_test[idx])
+                r_cruce = sup0.r_de_rho(rho_cruce)
+                aperturas.append(float(r_cruce))
+            else:
+                aperturas.append(min(rho_lim_0, rho_lim_1) * 0.5)
+
+        return aperturas
+
     @classmethod
     def lsoe(cls, zeta_0, zeta_1, d_0, d_2, n_0, n_1, n_2, sigma=None, d_1=None):
         """Factory para lentes singletes ovoides estigmáticas (LSOE).
