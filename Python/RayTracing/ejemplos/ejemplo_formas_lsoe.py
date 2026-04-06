@@ -66,6 +66,12 @@ def main():
             ax.legend(fontsize=8, loc='lower left')
 
     plt.tight_layout()
+
+    out = os.path.join(os.path.dirname(__file__), '..', 'docs', 'fig5_formas_lsoe.png')
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    plt.savefig(out, dpi=150, bbox_inches='tight')
+    print(f"Figura guardada en {os.path.normpath(out)}")
+
     plt.show()
 
 

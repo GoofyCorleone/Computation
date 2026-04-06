@@ -16,9 +16,15 @@ def resolver_cuartica(Q4, Q3, Q2, Q1, Q0, tol_imag=1e-10):
 
     Retorna todas las raíces reales ordenadas por valor absoluto (menor primero).
     Si Q4 ≈ 0 reduce a cúbica/cuadrática automáticamente.
+    Si algún coeficiente es NaN o Inf, retorna array vacío.
     """
     # Construir vector de coeficientes eliminando ceros líderes
     coefs = [Q4, Q3, Q2, Q1, Q0]
+
+    # Protección contra coeficientes inválidos (NaN/Inf por parámetros degenerados)
+    if any(not np.isfinite(c) for c in coefs):
+        return np.array([])
+
     while len(coefs) > 1 and abs(coefs[0]) < 1e-15:
         coefs.pop(0)
 

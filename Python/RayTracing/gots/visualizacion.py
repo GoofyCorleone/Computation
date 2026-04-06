@@ -7,14 +7,34 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 
 def _rho_clip_para_r(superficie, r_max):
-    """Encuentra el ρ máximo tal que r(ρ) ≤ r_max."""
+    """Encuentra el ρ máximo tal que r(ρ) ≤ r_max, solo rama ascendente.
+
+    Las superficies ovoides tienen r(ρ) que crece y luego decrece (el óvalo
+    se cierra). Solo usamos la primera rama (ascendente) hasta que r alcanza
+    r_max o comienza a decrecer.
+    """
     rho_lim = superficie.rho_max * 0.99 if np.isfinite(superficie.rho_max) else 200.0
     rho_test = np.linspace(0, rho_lim, 5000)
     r_all = superficie.r_de_rho(rho_test)
-    mask = r_all <= r_max * 1.001
-    if not np.any(mask):
+
+    # Encontrar dónde r empieza a decrecer (fin de la rama ascendente)
+    dr = np.diff(r_all)
+    idx_decreciente = np.where(dr < -1e-12)[0]
+    if len(idx_decreciente) > 0:
+        idx_max_r = idx_decreciente[0]
+    else:
+        idx_max_r = len(rho_test) - 1
+
+    # Dentro de la rama ascendente, encontrar dónde r excede r_max
+    idx_excede = np.where(r_all[:idx_max_r + 1] > r_max)[0]
+    if len(idx_excede) > 0:
+        idx_clip = idx_excede[0]
+    else:
+        idx_clip = idx_max_r
+
+    if idx_clip == 0:
         return 0.0
-    return rho_test[mask][-1]
+    return rho_test[idx_clip]
 
 
 def _perfil_hasta_r(superficie, r_max, num_puntos=500):

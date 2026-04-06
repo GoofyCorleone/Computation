@@ -97,22 +97,30 @@ def main():
     print(f"Rayos completos: {completos_off}")
 
     # --- Visualización 2D ---
+    import matplotlib.pyplot as plt
     print("\n=== Generando gráfica 2D (Fig. 12) ===")
     todos_resultados = resultados_eje + resultados_off
     colores = ['tab:blue'] * len(resultados_eje) + ['tab:red'] * len(resultados_off)
-    graficar_seccion_transversal(sistema, todos_resultados,
-                                  titulo='LSOE - Sección Transversal (Tabla 4)',
-                                  colores_rayos=colores,
-                                  z_imagen=d_2,
-                                  mostrar=True)
+    ax2d = graficar_seccion_transversal(sistema, todos_resultados,
+                                         titulo='LSOE — Sección Transversal (Tabla 4)',
+                                         colores_rayos=colores,
+                                         z_imagen=d_2,
+                                         mostrar=False)
+    docs = os.path.join(os.path.dirname(__file__), '..', 'docs')
+    os.makedirs(docs, exist_ok=True)
+    fig2d = ax2d.get_figure()
+    fig2d.savefig(os.path.join(docs, 'lsoe_seccion.png'), dpi=150, bbox_inches='tight')
+    plt.show()
 
     # --- Visualización 3D ---
     print("=== Generando gráfica 3D (Fig. 11) ===")
-    graficar_3d(sistema, todos_resultados,
-                titulo='LSOE - Vista 3D',
-                colores_rayos=colores,
-                z_imagen=d_2,
-                mostrar=True)
+    ax3d = graficar_3d(sistema, todos_resultados,
+                        titulo='LSOE — Vista 3D',
+                        colores_rayos=colores,
+                        z_imagen=d_2,
+                        mostrar=False)
+    ax3d.get_figure().savefig(os.path.join(docs, 'lsoe_3d.png'), dpi=150, bbox_inches='tight')
+    plt.show()
 
     # --- Exportar STL (opcional) ---
     if exportar_stl:

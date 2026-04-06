@@ -13,6 +13,32 @@ from .snell import refraccion_snell
 from .utilidades import normalizar
 
 
+def _perfil_rama_ascendente(sup, n_pts=5000):
+    """Devuelve (r, z) del perfil de una superficie solo en la rama ascendente.
+
+    La rama ascendente es el tramo desde ρ=0 hasta que r(ρ) empieza a decrecer
+    (el ecuador del óvalo), que corresponde a la parte físicamente usable de la
+    superficie como elemento óptico.
+
+    Returns:
+        (r_arr, z_arr) arrays 1D en orden creciente de r.
+    """
+    rho_lim = sup.rho_max * 0.99 if np.isfinite(sup.rho_max) else 200.0
+    rho = np.linspace(0, rho_lim, n_pts)
+    r = sup.r_de_rho(rho)
+    z = sup.z_de_rho(rho)
+
+    # Rama ascendente: hasta el primer índice donde r empieza a decrecer
+    dr = np.diff(r)
+    idx_desc = np.where(dr < -1e-12)[0]
+    if len(idx_desc) > 0:
+        idx_end = idx_desc[0] + 1
+        r = r[:idx_end]
+        z = z[:idx_end]
+
+    return r, z
+
+
 @dataclass
 class ResultadoTrazado:
     """Resultado del trazado de un rayo a través del sistema."""
@@ -96,8 +122,9 @@ class SistemaOptico:
     def encontrar_apertura(self):
         """Encuentra la apertura (r_max) donde superficies consecutivas se interceptan.
 
-        Para cada par de superficies consecutivas, busca el ρ donde sus
-        perfiles z(ρ) se cruzan. Ese punto define el borde físico de la lente.
+        Para cada par de superficies consecutivas, genera los perfiles (r, z)
+        en la rama ascendente (antes del ecuador del óvalo) y encuentra el cruce
+        en el espacio r-z. Ese punto define el borde físico de la lente.
 
         Returns:
             Lista de r_max para cada par de superficies consecutivas.
@@ -107,25 +134,31 @@ class SistemaOptico:
             sup0 = self.superficies[k]
             sup1 = self.superficies[k + 1]
 
-            rho_lim_0 = sup0.rho_max if np.isfinite(sup0.rho_max) else 200.0
-            rho_lim_1 = sup1.rho_max if np.isfinite(sup1.rho_max) else 200.0
-            rho_lim = min(rho_lim_0, rho_lim_1)
+            r0, z0 = _perfil_rama_ascendente(sup0)
+            r1, z1 = _perfil_rama_ascendente(sup1)
 
-            rho_test = np.linspace(0.01, rho_lim * 0.99, 2000)
-            z0 = sup0.z_de_rho(rho_test)
-            z1 = sup1.z_de_rho(rho_test)
+            r_max_comun = min(r0.max(), r1.max())
+            if r_max_comun < 1e-6:
+                aperturas.append(10.0)
+                continue
 
-            diff = z0 - z1
+            # Interpolar z como función de r en cuadrícula común
+            r_comun = np.linspace(0.01, r_max_comun * 0.999, 3000)
+            z0_interp = np.interp(r_comun, r0, z0)
+            z1_interp = np.interp(r_comun, r1, z1)
+
+            diff = z0_interp - z1_interp
             cruces = np.where(np.diff(np.sign(diff)))[0]
 
             if len(cruces) > 0:
                 idx = cruces[0]
-                f = abs(diff[idx]) / (abs(diff[idx]) + abs(diff[idx + 1]))
-                rho_cruce = rho_test[idx] + f * (rho_test[idx + 1] - rho_test[idx])
-                r_cruce = sup0.r_de_rho(rho_cruce)
+                denom = abs(diff[idx]) + abs(diff[idx + 1]) + 1e-30
+                f = abs(diff[idx]) / denom
+                r_cruce = r_comun[idx] + f * (r_comun[idx + 1] - r_comun[idx])
                 aperturas.append(float(r_cruce))
             else:
-                aperturas.append(min(rho_lim_0, rho_lim_1) * 0.5)
+                # Sin cruce: usar mínimo de los radios máximos (lente sin borde agudo)
+                aperturas.append(float(r_max_comun))
 
         return aperturas
 
