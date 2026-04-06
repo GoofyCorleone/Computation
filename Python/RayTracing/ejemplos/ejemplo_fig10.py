@@ -44,12 +44,14 @@ CONVERGENTES = [
     (0, 300, 60, 80, 1.0, 1.7, 1.0,  0.0, "Imagen lejana\nσ=0"),
 ]
 
-# Fila 4: lentes divergentes (imagen virtual: d2 < ζ0)
-# sigma=±1 degeneran con d2=30 (d1 cae exactamente en un vértice de superficie)
+# Fila 4: lentes divergentes (imagen virtual: d2=55 < ζ0=60)
+# d2 cercano pero menor a ζ0 produce cóncavidades visibles con sag comparable
+# a las lentes convergentes. sigma=−0.6 → cóncavo-menisco; σ=0 → bicóncava;
+# sigma=+0.6 → menisco-cóncavo
 DIVERGENTES = [
-    (0,  30, 60, 80, 1.0, 1.7, 1.0, -0.5, "Menisco cóncavo\nσ=−0.5 (div.)"),
-    (0,  30, 60, 80, 1.0, 1.7, 1.0,  0.0, "Bicóncava\nσ=0 (div.)"),
-    (0,  30, 60, 80, 1.0, 1.7, 1.0,  0.5, "Cóncava menisco\nσ=+0.5 (div.)"),
+    (0,  55, 60, 80, 1.0, 1.7, 1.0, -0.6, "Menisco cóncavo\nσ=−0.6 (div.)"),
+    (0,  55, 60, 80, 1.0, 1.7, 1.0,  0.0, "Bicóncava\nσ=0 (div.)"),
+    (0,  55, 60, 80, 1.0, 1.7, 1.0,  0.6, "Cóncava menisco\nσ=+0.6 (div.)"),
 ]
 
 CONFIGURACIONES = CONVERGENTES + DIVERGENTES
@@ -81,6 +83,11 @@ def trazar_y_dibujar(ax, config, exportar_stl_flag=False):
     try:
         aperturas = sistema.encontrar_apertura()
         r_max = aperturas[0] if aperturas else 25.0
+        # Para lentes divergentes (bicóncavas), las superficies no se cruzan:
+        # encontrar_apertura devuelve el r_max del óvalo (muy grande). Se acota
+        # a un radio físicamente razonable similar al de las lentes convergentes.
+        if divergente:
+            r_max = min(r_max, 22.0)
 
         sup0 = sistema.superficies[0]
         sup1 = sistema.superficies[1]
@@ -101,6 +108,8 @@ def trazar_y_dibujar(ax, config, exportar_stl_flag=False):
         ax.fill(-r_c, z_c, color=color_lente, alpha=0.5)
 
         # Borde de la lente (arista)
+        # Convergente: arista delgada (z0[-1] > z1[-1] no, z0 > z1 perpendicularmente)
+        # Divergente: la lente es más gruesa en el borde — el borde cierra el cuerpo
         ax.plot([r0[-1], r1[-1]], [z0[-1], z1[-1]], 'k-', linewidth=0.9)
         ax.plot([-r0[-1], -r1[-1]], [z0[-1], z1[-1]], 'k-', linewidth=0.9)
 
@@ -126,7 +135,7 @@ def trazar_y_dibujar(ax, config, exportar_stl_flag=False):
                 pf = res.puntos[-1]
                 df = res.direcciones[-1]
                 if not divergente:
-                    # Convergente: extender hasta la imagen (d_2)
+                    # Convergente: extender hasta la imagen real (d_2)
                     if abs(df[2]) > 1e-12:
                         t_ext = (d_2 - pf[2]) / df[2]
                         if t_ext > 0:
@@ -135,15 +144,26 @@ def trazar_y_dibujar(ax, config, exportar_stl_flag=False):
                                     color=color_rayo, linewidth=0.5,
                                     alpha=0.5, linestyle='--')
                 else:
-                    # Divergente: extender 60 unidades para mostrar divergencia
-                    pe = pf + 60.0 * df
-                    ax.plot([pf[1], pe[1]], [pf[2], pe[2]],
+                    # Divergente: extender 50 unidades hacia adelante (divergencia real)
+                    pe_fwd = pf + 50.0 * df
+                    ax.plot([pf[1], pe_fwd[1]], [pf[2], pe_fwd[2]],
                             color=color_rayo, linewidth=0.5,
                             alpha=0.5, linestyle='--')
+                    # Extensión hacia atrás: trazar hasta el foco virtual en d_2
+                    if abs(df[2]) > 1e-12:
+                        t_back = (d_2 - pf[2]) / df[2]  # t_back < 0 (hacia atrás)
+                        if t_back < 0:
+                            pe_back = pf + t_back * df
+                            ax.plot([pf[1], pe_back[1]], [pf[2], pe_back[2]],
+                                    color=color_rayo, linewidth=0.5,
+                                    alpha=0.3, linestyle=':')
 
         # Ejes
         ax.axhline(y=d_0, color='gray', linewidth=0.3, linestyle=':')
         ax.axvline(x=0, color='gray', linewidth=0.3, linestyle='-.')
+        if divergente:
+            # Plano de imagen virtual
+            ax.axhline(y=d_2, color='orange', linewidth=0.5, linestyle='--', alpha=0.7)
         ax.set_title(desc, fontsize=8.5)
         ax.set_aspect('equal')
 

@@ -31,6 +31,8 @@ From plano-convex (σ = −1) to convex-plano (σ = +1).
 
 ### Ray-tracing gallery — convergent and divergent lenses (Fig. 10)
 Blue lenses: converging (real image). Yellow lenses: diverging (virtual image, d₂ < ζ₀).
+Diverging lenses show **biconcave/concave-meniscus** shapes with rays spreading after the lens;
+dashed backward extensions converge at the virtual focus.
 
 ![Galería Fig. 10](docs/fig10_lsoe.png)
 
@@ -75,6 +77,13 @@ python ejemplos/ejemplo_fig10.py --stl    # export one STL per lens
 4×3 panel with 12 LSOE configurations:
 - Rows 1–3: converging lenses (biconvex, meniscus, plano-convex, virtual object, …)
 - Row 4: **diverging lenses** (virtual image, d₂ < ζ₀) — biconcave and concave-meniscus shapes
+
+**How diverging LSOE works:** setting d₂ slightly below ζ₀ (e.g. d₂=55 with ζ₀=60) produces
+surfaces with O₀ < 0 (first surface concave, curves away from object) and O₁ > 0 (second
+surface also concave from the exit side). The lens is thicker at the rim than at the center.
+Rays refracted through both surfaces diverge; their backward extensions converge at the virtual
+focus d₂. Root selection in the σ-formula always chooses d₁ **outside** [ζ₀, ζ₁] to guarantee
+the correct sign of curvature.
 
 ---
 

@@ -224,9 +224,22 @@ def _d1_desde_sigma(sigma, zeta_0, zeta_1, d_0, d_2, n_0, n_1, n_2):
 
     sqrt_disc = np.sqrt(discriminante)
 
-    # Eq. 43: signo - da d_1 ∈ [ζ_0, ζ_1], signo + da d_1 fuera (caso típico)
     d1_minus = (-C1 - sqrt_disc) / (2 * C2)
-    d1_plus = (-C1 + sqrt_disc) / (2 * C2)
+    d1_plus  = (-C1 + sqrt_disc) / (2 * C2)
 
-    # Seleccionar la raíz fuera de [ζ_0, ζ_1] (imagen intermedia virtual/lejana)
-    return d1_plus
+    # Seleccionar siempre la raíz FUERA de [ζ_0, ζ_1].
+    # Para lentes convergentes (d₂>ζ₁): d1_plus está fuera → imagen intermedia lejana.
+    # Para lentes divergentes (d₂<ζ₀):  d1_plus cae dentro → usar d1_minus (fuera).
+    lo, hi = min(zeta_0, zeta_1), max(zeta_0, zeta_1)
+    inside_plus  = lo < d1_plus  < hi
+    inside_minus = lo < d1_minus < hi
+
+    if not inside_plus:
+        return d1_plus
+    elif not inside_minus:
+        return d1_minus
+    else:
+        # Ambas raíces dentro (degenerado): elegir la más lejana del intervalo
+        dist_plus  = min(abs(d1_plus  - lo), abs(d1_plus  - hi))
+        dist_minus = min(abs(d1_minus - lo), abs(d1_minus - hi))
+        return d1_plus if dist_plus >= dist_minus else d1_minus
