@@ -1,0 +1,46 @@
+==============================================================
+  ANÁLISIS DE ABERRACIONES — SENSOR SHACK-HARTMANN
+==============================================================
+  Archivo : lenteThorlabs.csv
+  Fecha   : 2026-04-10 14:14:15
+
+MÉTRICAS DEL FRENTE DE ONDA (sin pistón ni inclinación)
+---------------------------------------------
+  PV       = 12.2105 µm
+  RMS      = 3.4225 µm
+  Strehl   ≈ 0.0000  (Maréchal, λ = 0.6328 µm)
+  Ø pupila = 3.000 mm
+  Calidad  : Pobre — considerar recalibración
+
+COEFICIENTES DE ZERNIKE (OSA/ANSI, columnas CSV: n, m, c)
+-------------------------------------------------------
+    j    n     m  Nombre                          c [µm]  Nota
+  ----------------------------------------------------------
+    1    0     0  Pistón                        -23.5050  ← DOMINANTE
+    2    1    -1  Inclinación Y (Tilt)           11.5780  ← DOMINANTE
+    3    1     1  Inclinación X (Tip)            15.2260  ← DOMINANTE
+    4    2    -2  Astigmatismo 45°               -0.1730  
+    5    2     0  Desenfoque                     -3.3700  ← DOMINANTE
+    6    2     2  Astigmatismo 0°                 0.2190  
+    7    3    -3  Trébol Y                       -0.0030  
+    8    3    -1  Coma Y                         -0.0030  
+    9    3     1  Coma X                          0.0200  
+   10    3     3  Trébol X                        0.0100  
+   11    4    -4  Tetratrébol Y                  -0.0090  
+   12    4    -2  Astigmatismo 2.° 45°            0.0080  
+   13    4     0  Esférica Primaria               0.0140  
+   14    4     2  Astigmatismo 2.° 0°            -0.0060  
+   15    4     4  Tetratrébol X                  -0.0060  
+
+ABERRACIONES DE SEIDEL
+-------------------------------------------------------
+  Aberración                c_Z [µm]   W_Seidel [µm]  Forma
+  ----------------------------------------------------------
+  Desenfoque                 -3.3700        -11.6740  W₀₂₀ ρ²
+  Astigmatismo                0.2791          1.3672  W₂₂₂ ρ²cos²θ
+  Coma                        0.0202          0.1716  W₁₃₁ ρ³cosθ
+  Esférica Primaria           0.0140          0.1878  W₀₄₀ ρ⁴
+
+INTERPRETACIÓN
+---------------------------------------------
+  • Desenfoque elevado — verificar posición del plano imagen.
