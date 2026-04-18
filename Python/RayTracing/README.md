@@ -11,7 +11,8 @@ Exact ray tracing through **Cartesian oval surfaces** (Descartes ovoids) using t
 - Designs **LSOE** (Lentes Singletes Ovoides Estigmáticas) with a shape factor σ
 - Surfaces are clipped at their physical **aperture** (mutual intersection of both ovals)
 - Generates 2D meridional section and full 3D visualizations
-- Exports **watertight STL** for 3D printing
+- Exports **watertight STL solids** (closed manifold) ready for 3D printing
+- Builds **rigorously aplanatic LSOEs** (four Tipo-0/1/2/3 families from Sec. 4.4 of the thesis) — free of both spherical aberration *and* coma
 
 ## Gallery
 
@@ -35,6 +36,12 @@ Diverging lenses show **biconcave/concave-meniscus** shapes with rays spreading 
 dashed backward extensions converge at the virtual focus.
 
 ![Galería Fig. 10](docs/fig10_lsoe.png)
+
+### Rigorously aplanatic LSOEs — four types (Sec. 4.4 of the thesis)
+Stigmatic **and** free of coma. Each panel verifies rigorous stigmatism
+(image-plane residual ≈ 10⁻¹⁵) and aplanatism (ΔM = 0 over the full ρ range).
+
+![Aplanáticas — cuatro tipos](docs/aplanaticas_cuatro_tipos.png)
 
 ---
 
@@ -84,6 +91,28 @@ surface also concave from the exit side). The lens is thicker at the rim than at
 Rays refracted through both surfaces diverge; their backward extensions converge at the virtual
 focus d₂. Root selection in the σ-formula always chooses d₁ **outside** [ζ₀, ζ₁] to guarantee
 the correct sign of curvature.
+
+### Rigorously aplanatic LSOEs (four types)
+
+```bash
+python ejemplos/ejemplo_aplanaticas.py          # figure only
+python ejemplos/ejemplo_aplanaticas.py --stl    # also export solid STLs
+```
+
+Builds one lens from each of the four aplanatic families derived in Section 4.4 of the thesis.
+All four are simultaneously **rigorously stigmatic** (perfect point-to-point imaging, residual
+≈ 10⁻¹⁵ at the image plane) and **rigorously aplanatic** (M({ρₖ}) = const, i.e. they satisfy
+the Abbe sine condition exactly → zero coma):
+
+| Tipo | GOTS condition                | d_{k+1} from d_k                                 | Surface shape                  |
+|------|-------------------------------|--------------------------------------------------|--------------------------------|
+| 0    | 2S_k = G_k · O_k²             | d_{k+1} = ζ_k + (n_k / n_{k+1})(d_k − ζ_k)       | Sphere at Young's aplanatic pts|
+| 1    | d_1 → ∞ (LSOE only)           | Internal rays parallel to axis                    | Conic (parabola/hyperboloid)   |
+| 2    | O_k = 0                       | d_{k+1} = ζ_k + (n_{k+1} / n_k)(d_k − ζ_k)       | Flat at vertex (aspheric)      |
+| 3    | G_k = 0                       | d_{k+1} = ζ_k + (n_k / n_{k+1})² (d_k − ζ_k)     | Meniscus                       |
+
+For Tipos 2 and 3 the aplanatic magnification equals n_N / n_0, so setting n_0 = n_N gives
+M = 1 strictly.
 
 ---
 
@@ -150,14 +179,37 @@ For diverging lenses use **d₂ < ζ₀** (virtual image before the front surfac
 
 ## STL export
 
-`exportar_sistema_stl(sistema, 'file.stl')` generates a **watertight closed solid**:
+`exportar_sistema_stl(sistema, 'file.stl')` generates a **watertight solid** (closed manifold):
 
-- Both surfaces are clipped at the physical aperture (oval intersection)
-- A rim band connects the two surface edges → closed manifold for 3D printing
+- Front + back surfaces **plus a lateral rim** → fully closed 3D-printable volume
+- Single-apex topology (no fan-degenerate triangles at ρ = 0)
+- Outward-facing normals enforced by signed-volume check
+- Every edge is shared by exactly two triangles (manifold check passes automatically)
 - Binary STL format, readable in Blender, MeshLab, Cura, PrusaSlicer, etc.
+
+Optional args: `r_max` (override the physical aperture; required for biconcave diverging
+lenses where the surfaces never cross in the ascending branch) and `espesor_minimo`
+(minimum rim thickness to avoid knife-edge lenses that confuse slicers).
 
 By default, STL export is **ON** for `ejemplo_lsoe.py` and **OFF** for the gallery examples.
 Pass `--no-stl` / `--stl` to toggle.
+
+### Aplanatic API
+
+```python
+from gots import (
+    sistema_lsoe_tipo0, sistema_lsoe_tipo1,
+    sistema_lsoe_tipo2, sistema_lsoe_tipo3,
+    magnificacion_M, exportar_sistema_stl,
+)
+
+sa = sistema_lsoe_tipo0(n_0=1.0, n_1=1.5, n_2=1.0,
+                        zeta_0=60, zeta_1=70, d_0=0)
+# sa.sistema is a SistemaOptico; sa.d_1 and sa.d_2 are the derived positions
+print(magnificacion_M(sa, np.linspace(0.1, 3.0, 5)))  # constant → aplanatic
+
+exportar_sistema_stl(sa.sistema, 'aplanatica_tipo0.stl', r_max=18.0)
+```
 
 ---
 
@@ -171,6 +223,7 @@ gots/
     rayo.py                  # Ray–surface intersection via quartic (Eq. 51)
     snell.py                 # Vectorial Snell's law (Eq. 68)
     sistema_optico.py        # Multi-surface system, LSOE factory, aperture finder
+    aplanaticas.py           # Rigorously aplanatic surfaces (Sec. 4.4, Tipos 0–3)
     visualizacion.py         # 2D meridional section and 3D matplotlib plots
     exportar_stl.py          # Binary STL export (watertight solid)
     utilidades.py            # Utilities: normalize, quartic solver
@@ -178,11 +231,13 @@ ejemplos/
     ejemplo_lsoe.py          # Table 4 LSOE — reference lens (Figs. 11–12)
     ejemplo_formas_lsoe.py   # Lens shapes vs σ (Fig. 5)
     ejemplo_fig10.py         # Ray-tracing gallery, convergent + divergent (Fig. 10)
+    ejemplo_aplanaticas.py   # Four rigorously aplanatic LSOEs (Sec. 4.4)
 docs/
     lsoe_seccion.png         # 2D cross-section of reference lens
     lsoe_3d.png              # 3D view of reference lens
     fig5_formas_lsoe.png     # Five lens shapes vs σ
     fig10_lsoe.png           # Gallery of 12 LSOE configurations
+    aplanaticas_cuatro_tipos.png  # Four aplanatic families (Tipo-0/1/2/3)
 ```
 
 ## Reference

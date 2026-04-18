@@ -12,6 +12,15 @@ from .sistema_optico import SistemaOptico, ResultadoTrazado
 from .visualizacion import graficar_seccion_transversal, graficar_3d
 from .exportar_stl import exportar_superficie_stl, exportar_sistema_stl
 from .utilidades import normalizar, resolver_cuartica
+from .aplanaticas import (
+    SistemaAplanetico,
+    d_k1_tipo0, d_k1_tipo2, d_k1_tipo3,
+    superficie_tipo0, superficie_tipo1_par,
+    superficie_tipo2, superficie_tipo3,
+    sistema_lsoe_tipo0, sistema_lsoe_tipo1,
+    sistema_lsoe_tipo2, sistema_lsoe_tipo3,
+    magnificacion_M,
+)
 
 __all__ = [
     'ParametrosGOTS', 'calcular_gots',
@@ -22,4 +31,11 @@ __all__ = [
     'graficar_seccion_transversal', 'graficar_3d',
     'exportar_superficie_stl', 'exportar_sistema_stl',
     'normalizar', 'resolver_cuartica',
+    'SistemaAplanetico',
+    'd_k1_tipo0', 'd_k1_tipo2', 'd_k1_tipo3',
+    'superficie_tipo0', 'superficie_tipo1_par',
+    'superficie_tipo2', 'superficie_tipo3',
+    'sistema_lsoe_tipo0', 'sistema_lsoe_tipo1',
+    'sistema_lsoe_tipo2', 'sistema_lsoe_tipo3',
+    'magnificacion_M',
 ]
