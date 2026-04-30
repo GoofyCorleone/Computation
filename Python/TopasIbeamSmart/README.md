@@ -3,14 +3,18 @@
 Control por software de un láser diodo **TOPTICA iBeam Smart** a través de su
 puerto serie RS-232 (usando un adaptador USB-Serial). Incluye:
 
-- **Script CLI** (`ibeam_encender.py`) — enciende el láser, mide potencia,
-  grafica la evolución temporal y apaga.
-- **GUI** (`ibeam_gui.py`) — aplicación PyQt6 con detección automática de
-  puerto, control de canales y encendido/apagado de emisión.
+- **Script CLI** (`ibeam_encender.py`) — enciende el láser, mide potencia y
+  temperatura, grafica la evolución temporal y apaga.
+- **GUI** (`ibeam_gui.py`) — aplicación PyQt6 con dos pestañas:
+  *Control* (potencia, temperatura, estabilidad, gráficas P(t)/T(t)) y
+  *FINE / SKILL* (control de ruido e incoherencia de speckle, gráficas
+  P(t) a largo plazo y ruido de intensidad).
 - **App macOS** (`dist/iBeamSmart.app`) — la GUI empaquetada como
   aplicación nativa (PyInstaller).
 
-![GUI en funcionamiento](docs/img/gui_main.png)
+| Pestaña Control | Pestaña FINE / SKILL |
+|---|---|
+| ![Control](docs/img/gui_tab1.png) | ![FINE/SKILL](docs/img/gui_tab2.png) |
 
 ---
 
@@ -35,10 +39,20 @@ puerto serie RS-232 (usando un adaptador USB-Serial). Incluye:
   móvil de 8 s) y muestra una barra de progreso y un ETA estimado para
   alcanzar la estabilidad. El ETA usa un modelo exponencial con τ ≈ 25 s
   típico del calentamiento del diodo.
-- **Gráficos en tiempo real**: dos paneles en paralelo embebidos en la app
-  — potencia P(t) y temperatura T(t) — que se actualizan en vivo cada 700 ms
-  con una ventana deslizante de 60 s. Cada gráfico incluye la línea de
-  setpoint de referencia.
+- **Gráficos en tiempo real (pestaña Control)**: potencia P(t) y temperatura
+  T(t), ventana deslizante de 60 s, paleta dark con setpoints marcados.
+- **FINE — Feedback Induced Noise Eraser** (pestaña FINE/SKILL): activa el
+  lazo de retroalimentación con el fotodiodo interno en tres modos:
+  *Apagado*, *Modo A* (`fine a`) o *Modo B* (`fine b`). Estado leído del
+  dispositivo con `sta fine`.
+- **SKILL — Speckle Killer** (pestaña FINE/SKILL): reduce el speckle en
+  acoplamiento a fibra. Tres modos: *Apagado*, *Modo 1* (`skill 1`) o
+  *Modo 2* (`skill 2`). Estado rastreado localmente.
+- **Gráficas a largo plazo** (pestaña FINE/SKILL): potencia P(t) en
+  minutos (últimos 10 min) y ruido de intensidad σ/μ [%] como proxy de
+  coherencia — disminuye a medida que el láser se estabiliza.
+- **Paleta dark** en todos los gráficos (fondo oscuro, curvas en azul,
+  rojo y verde, grilla tenue) integrada con la estética de la app.
 - **Apagado seguro**: cerrar la ventana envía `la off` antes de liberar el
   puerto.
 
@@ -172,6 +186,37 @@ aplicación.
 8. **Apaga** con *Apagar (LA OFF)* o simplemente cerrando la ventana
    (la app envía `la off` automáticamente antes de salir).
 
+### Pestaña FINE / SKILL
+
+Cambia a la pestaña *FINE / SKILL* para acceder a las funciones de
+reducción de ruido e incoherencia:
+
+**FINE (Feedback Induced Noise Eraser)**
+Activa el lazo de retroalimentación interno con el fotodiodo integrado.
+Selecciona con los botones de radio:
+- *Apagado* — `fine off`
+- *Modo A (FINE 1)* — `fine on` + `fine a`
+- *Modo B (FINE 2)* — `fine on` + `fine b`
+
+El estado real del dispositivo se lee con `sta fine` cada ciclo de polling.
+
+**SKILL (Speckle Killer)**
+Reduce el speckle al acoplar a fibra óptica. Selecciona:
+- *Apagado* — `skill off`
+- *Modo 1 (SKILL 1)* — `skill on` + `skill 1`
+- *Modo 2 (SKILL 2)* — `skill on` + `skill 2`
+
+El estado SKILL se rastrea localmente (el firmware de este modelo no expone
+`sta skill`).
+
+**Gráficas de la pestaña FINE/SKILL**
+- *Potencia — últimos 10 min*: historial de potencia en escala de minutos.
+  Útil para observar deriva térmica o el efecto de activar FINE.
+- *Ruido de intensidad [%] — proxy coherencia*: muestra σ/μ (%) calculado
+  sobre una ventana móvil de 30 s. Un valor bajo (< 0.5 %) indica emisión
+  estable y alta coherencia de amplitud. La línea discontinua marca el
+  umbral de estabilidad.
+
 ### Consideración sobre canales
 
 La salida óptica del iBeam Smart equivale a la suma de los canales con
@@ -255,6 +300,11 @@ El ejecutable queda en `dist\iBeamSmart.exe`.
 | `sta tec`           | Estado del lazo TEC (`ON` / `OFF`)                    |
 | `sh syst data`      | Bloque de configuración: incluye `TEC setpoint`       |
 | `set temp X`        | Fijar setpoint del TEC (acceso restringido por defecto)|
+| `fine on` / `fine off` | Activar / desactivar FINE                    |
+| `fine a` / `fine b`   | Seleccionar modo A o B de FINE               |
+| `sta fine`            | Estado FINE (`ON` / `OFF`)                   |
+| `skill on` / `skill off` | Activar / desactivar SKILL               |
+| `skill 1` / `skill 2`   | Seleccionar modo 1 o 2 de SKILL           |
 | `sh ch`             | Estado detallado de canales                    |
 
 † No siempre silencia la contribución; usar `ch N pow 0` para garantizar que
@@ -266,11 +316,15 @@ un canal no contribuye a la salida.
 
 ```
 TopasIbeamSmart/
-├── ibeam_encender.py     # Script CLI + gráfica de potencia
-├── ibeam_gui.py          # GUI PyQt6 (driver + ventana)
-├── dist/                 # App empaquetada (PyInstaller)
+├── ibeam_encender.py        # Script CLI + gráfica de potencia y temperatura
+├── ibeam_gui.py             # GUI PyQt6 (driver + dos pestañas + gráficas)
+├── dist/                    # App empaquetada (PyInstaller)
 │   └── iBeamSmart.app
-├── docs/img/             # Capturas y gráficos usados en este README
-├── potencia_laser.png    # Última ejecución del script CLI
+├── docs/img/
+│   ├── gui_tab1.png         # Captura pestaña Control
+│   ├── gui_tab2.png         # Captura pestaña FINE / SKILL
+│   ├── gui_main.png         # Captura principal (igual a gui_tab1)
+│   └── potencia_laser.png   # Última ejecución del script CLI
+├── potencia_laser.png       # Última ejecución del script CLI
 └── README.md
 ```
