@@ -1,37 +1,53 @@
 """
 Interfaz gráfica (PyQt6) para el láser TOPTICA iBeam Smart.
-Encender/apagar emisión y modificar la potencia de cada canal.
+Encender/apagar emisión, modificar la potencia de cada canal, monitorear y
+controlar la temperatura del diodo, e indicar la estabilidad de la potencia.
 
 Detecta automáticamente el puerto del adaptador USB-Serial al que está
 conectado el iBeam Smart (sondea cada puerto hasta encontrar el prompt
 'CMD> ' a 115200 baud).
 
-Nota sobre canales:
-  La potencia de salida del iBeam Smart es la SUMA de los canales activos.
-  Para que el control de un canal se corresponda con la salida, el otro
-  canal debe estar en 0 mW. Los comandos 'en N' / 'di N' no modifican la
-  contribución del canal en este firmware — la única forma confiable es
-  fijar el nivel con 'ch N pow 0'.
+Notas:
+  - La potencia de salida del iBeam Smart es la SUMA de los canales activos.
+    Para que el control de un canal se corresponda con la salida, el otro
+    canal debe estar en 0 mW. Los comandos 'en N' / 'di N' no modifican la
+    contribución del canal en este firmware — la única forma confiable es
+    fijar el nivel con 'ch N pow 0'.
+  - El setpoint de temperatura (TEC) viene fijado de fábrica (típicamente
+    25.0 °C). El comando 'set temp X' está protegido por contraseña en el
+    firmware estándar y devolverá '%SYS-W-047, access restricted'. La app
+    intenta el cambio y avisa si fue rechazado.
 """
 
+import math
 import sys
 import threading
 import time
+from collections import deque
 
 import serial
 from serial.tools import list_ports
-from PyQt6.QtCore import QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QPushButton,
-    QVBoxLayout, QWidget,
+    QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar,
+    QPushButton, QVBoxLayout, QWidget,
 )
 
 
-BAUD           = 115200
-TIMEOUT        = 1.5
-PROMPT         = b"CMD> "
-INTERVALO_POLL_MS = 700
+BAUD               = 115200
+TIMEOUT            = 1.5
+PROMPT             = b"CMD> "
+INTERVALO_POLL_MS  = 700
+
+# Estabilidad de potencia
+VENTANA_ESTAB_S    = 8.0     # ventana móvil para evaluar estabilidad
+UMBRAL_REL_ESTABLE = 0.005   # < 0.5 % de variación relativa
+MIN_MUESTRAS_EST   = 6
+TAU_DIODO_S        = 25.0    # constante térmica típica del diodo (warmup)
+
+# Estabilidad térmica
+TOL_TEMP_C         = 0.30    # |T - setpoint| < 0.3 °C => térmica estable
 
 
 # --------------------------------------------------------------------------
@@ -44,9 +60,6 @@ def candidatos_puerto() -> list[str]:
         nombre = p.device
         desc = (p.description or "").lower()
         manuf = (p.manufacturer or "").lower()
-        # macOS: /dev/cu.usbserial-*, /dev/cu.usbmodem*
-        # Windows: COMn con descripción CH340/FTDI
-        # Linux: /dev/ttyUSB*, /dev/ttyACM*
         if (
             "usbserial" in nombre.lower()
             or "usbmodem" in nombre.lower()
@@ -78,6 +91,75 @@ def detectar_puerto() -> str | None:
         if puerto_responde_ibeam(puerto):
             return puerto
     return None
+
+
+# --------------------------------------------------------------------------
+# Estabilidad de potencia
+# --------------------------------------------------------------------------
+class EstabilidadPotencia:
+    """Mantiene un historial de (t, potencia) y calcula estabilidad y ETA."""
+
+    def __init__(self, ventana_s: float = VENTANA_ESTAB_S):
+        self.ventana_s = ventana_s
+        self.muestras: deque[tuple[float, float]] = deque()
+
+    def reset(self):
+        self.muestras.clear()
+
+    def agregar(self, t: float, p_mW: float):
+        self.muestras.append((t, p_mW))
+        t_min = t - self.ventana_s
+        while self.muestras and self.muestras[0][0] < t_min:
+            self.muestras.popleft()
+
+    def _stats(self) -> tuple[float, float, float, int] | None:
+        n = len(self.muestras)
+        if n < MIN_MUESTRAS_EST:
+            return None
+        ts = [t for t, _ in self.muestras]
+        ps = [p for _, p in self.muestras]
+        media = sum(ps) / n
+        var = sum((p - media) ** 2 for p in ps) / n
+        std = math.sqrt(var)
+        t_med = sum(ts) / n
+        num = sum((ts[i] - t_med) * (ps[i] - media) for i in range(n))
+        den = sum((ts[i] - t_med) ** 2 for i in range(n))
+        pendiente = num / den if den > 1e-9 else 0.0
+        return media, std, pendiente, n
+
+    def estado(self) -> tuple[str, float | None, float | None]:
+        """
+        Devuelve (texto, fraccion_progreso, eta_segundos).
+        - texto: 'Estabilizado', 'Estabilizando', 'Calentando', 'Sin datos'
+        - fraccion_progreso: 0..1 (None si sin datos)
+        - eta_segundos: estimación de tiempo restante (None si no aplica)
+        """
+        s = self._stats()
+        if s is None:
+            return ("Sin datos", None, None)
+        media, std, pendiente, _ = s
+        if abs(media) < 1e-6:
+            return ("Sin emisión", 0.0, None)
+
+        rel_std   = std / abs(media)
+        rel_drift = abs(pendiente * self.ventana_s) / abs(media)
+        rel = max(rel_std, rel_drift)
+
+        if rel < UMBRAL_REL_ESTABLE:
+            return ("Estabilizado", 1.0, 0.0)
+
+        # Estimar ETA suponiendo decaimiento exponencial:
+        # rel(t) = rel_actual * exp(-t/τ) → t = τ · ln(rel/UMBRAL)
+        eta = TAU_DIODO_S * math.log(rel / UMBRAL_REL_ESTABLE)
+        eta = max(0.0, min(eta, 600.0))  # acotar a [0, 10 min]
+
+        # Mapear a fracción 0..1 (logarítmica entre rel y UMBRAL)
+        # Cuando rel/UMBRAL = 10  → fracción ≈ 0.0 (lejos)
+        # Cuando rel/UMBRAL = 1   → fracción = 1.0 (estable)
+        frac = max(0.0, min(1.0, 1.0 - math.log10(rel / UMBRAL_REL_ESTABLE) / 2.0))
+
+        texto = "Estabilizando" if rel < 5 * UMBRAL_REL_ESTABLE else "Calentando"
+        return (texto, frac, eta)
 
 
 # --------------------------------------------------------------------------
@@ -124,15 +206,12 @@ class IBeamDriver:
     def estado(self) -> str: return self.enviar("sta la")
 
     def set_potencia(self, canal: int, mW: float):
-        # Fijar el nivel del canal. Para "apagar" un canal, enviar 0 mW.
         self.enviar(f"ch {canal} pow {mW:.3f}")
 
     def leer_niveles(self) -> dict[int, float]:
-        """Devuelve {1: mW_CH1, 2: mW_CH2} a partir de 'sh level pow'."""
         resp = self.enviar("sh level pow")
         niveles = {}
         for linea in resp.splitlines():
-            # Formato: 'CH1, PWR:  0.500 mW'
             s = linea.strip()
             if s.upper().startswith("CH") and "PWR" in s.upper():
                 try:
@@ -152,6 +231,41 @@ class IBeamDriver:
                         return float(tok)
         return 0.0
 
+    def leer_temperatura_C(self) -> float | None:
+        """Lee la temperatura actual del diodo en °C ('sh temp' → 'TEMP = 025.0 C')."""
+        resp = self.enviar("sh temp")
+        for linea in resp.splitlines():
+            s = linea.strip().upper()
+            if s.startswith("TEMP") and "=" in s:
+                try:
+                    valor = s.split("=", 1)[1].replace("C", "").replace("°", "").strip()
+                    return float(valor)
+                except ValueError:
+                    pass
+        return None
+
+    def leer_setpoint_temp_C(self) -> float | None:
+        """Extrae el setpoint del TEC desde 'sh syst data' (línea 'TEC setpoint: ... -> X C')."""
+        resp = self.enviar("sh syst data")
+        for linea in resp.splitlines():
+            s = linea.strip()
+            if s.lower().startswith("tec setpoint") and "->" in s:
+                try:
+                    cola = s.split("->", 1)[1].replace("C", "").replace("°", "").strip()
+                    return float(cola)
+                except ValueError:
+                    pass
+        return None
+
+    def leer_estado_tec(self) -> str:
+        """Devuelve 'ON' / 'OFF' / texto-de-error según 'sta tec'."""
+        return self.enviar("sta tec").strip().upper()
+
+    def set_temperatura_C(self, temp_C: float) -> str:
+        """Intenta fijar el setpoint del TEC. Suele estar restringido en
+        firmware estándar y devolver '%SYS-W-047, access restricted'."""
+        return self.enviar(f"set temp {temp_C:.2f}")
+
 
 # --------------------------------------------------------------------------
 # GUI
@@ -163,13 +277,17 @@ class MainWindow(QMainWindow):
     sig_niveles       = pyqtSignal(dict)
     sig_niveles_spin  = pyqtSignal(dict)
     sig_error_poll    = pyqtSignal(str)
-    sig_detect_done   = pyqtSignal(str)  # puerto o "" si no encontrado
+    sig_detect_done   = pyqtSignal(str)
+    sig_temperatura   = pyqtSignal(object)  # (temp_actual, setpoint, tec_estado)
+    sig_estabilidad   = pyqtSignal(object)  # (texto, frac, eta)
+    sig_setp_resp     = pyqtSignal(str, str) # (setpoint_pedido, respuesta)
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("iBeam Smart - Control")
-        self.setFixedSize(540, 540)
+        self.setFixedSize(560, 760)
         self.driver = IBeamDriver()
+        self.estabilidad = EstabilidadPotencia()
 
         self._construir_ui()
         self._conectar_senales()
@@ -200,10 +318,10 @@ class MainWindow(QMainWindow):
         # Canales
         gb_ch = QGroupBox("Canales (potencia en mW — la salida es la SUMA)")
         grid = QGridLayout(gb_ch)
-        grid.addWidget(QLabel("<b>Canal</b>"),         0, 0)
-        grid.addWidget(QLabel("<b>Setpoint [mW]</b>"), 0, 1)
-        grid.addWidget(QLabel(""),                      0, 2)
-        grid.addWidget(QLabel("<b>Nivel actual</b>"),   0, 3)
+        grid.addWidget(QLabel("<b>Canal</b>"),          0, 0)
+        grid.addWidget(QLabel("<b>Setpoint [mW]</b>"),  0, 1)
+        grid.addWidget(QLabel(""),                       0, 2)
+        grid.addWidget(QLabel("<b>Nivel actual</b>"),    0, 3)
 
         self.spn_pow   = {}
         self.lbl_nivel = {}
@@ -229,6 +347,33 @@ class MainWindow(QMainWindow):
             self.lbl_nivel[canal] = lbl
         layout.addWidget(gb_ch)
 
+        # Temperatura
+        gb_temp = QGroupBox("Temperatura del diodo (TEC)")
+        lay_t = QGridLayout(gb_temp)
+        lay_t.addWidget(QLabel("Setpoint:"), 0, 0)
+        self.spn_temp = QDoubleSpinBox()
+        self.spn_temp.setRange(15.0, 40.0)
+        self.spn_temp.setDecimals(2)
+        self.spn_temp.setSingleStep(0.5)
+        self.spn_temp.setValue(25.0)
+        self.spn_temp.setSuffix(" °C")
+        lay_t.addWidget(self.spn_temp, 0, 1)
+        self.btn_temp = QPushButton("Aplicar")
+        self.btn_temp.clicked.connect(self._aplicar_temperatura)
+        lay_t.addWidget(self.btn_temp, 0, 2)
+
+        self.lbl_temp_actual = QLabel("Actual: —")
+        self.lbl_temp_actual.setStyleSheet("font-weight: bold; font-size: 13px;")
+        lay_t.addWidget(self.lbl_temp_actual, 1, 0, 1, 2)
+        self.lbl_tec = QLabel("TEC: —")
+        self.lbl_tec.setStyleSheet("font-weight: bold; font-size: 13px;")
+        lay_t.addWidget(self.lbl_tec, 1, 2)
+
+        self.lbl_estab_temp = QLabel("Estabilidad térmica: —")
+        self.lbl_estab_temp.setTextFormat(Qt.TextFormat.RichText)
+        lay_t.addWidget(self.lbl_estab_temp, 2, 0, 1, 3)
+        layout.addWidget(gb_temp)
+
         # Emisión
         gb_em = QGroupBox("Emisión")
         lay_em = QVBoxLayout(gb_em)
@@ -253,6 +398,23 @@ class MainWindow(QMainWindow):
         fila_est.addWidget(self.lbl_estado)
         fila_est.addWidget(self.lbl_potencia)
         lay_em.addLayout(fila_est)
+
+        # Estabilidad de potencia
+        fila_stab = QHBoxLayout()
+        self.lbl_estab_pow = QLabel("Estabilidad: —")
+        self.lbl_estab_pow.setStyleSheet("font-weight: bold; font-size: 13px;")
+        self.lbl_estab_pow.setTextFormat(Qt.TextFormat.RichText)
+        fila_stab.addWidget(self.lbl_estab_pow)
+        self.lbl_eta = QLabel("ETA: —")
+        fila_stab.addWidget(self.lbl_eta)
+        lay_em.addLayout(fila_stab)
+
+        self.bar_estab = QProgressBar()
+        self.bar_estab.setRange(0, 100)
+        self.bar_estab.setValue(0)
+        self.bar_estab.setTextVisible(True)
+        self.bar_estab.setFormat("%p% estabilizado")
+        lay_em.addWidget(self.bar_estab)
         layout.addWidget(gb_em)
 
         # Log
@@ -265,27 +427,111 @@ class MainWindow(QMainWindow):
         lay_log.addWidget(self.log)
         layout.addWidget(gb_log)
 
-        # Detectar puerto al arrancar (en segundo plano)
         QTimer.singleShot(100, self._auto_detectar)
 
     def _conectar_senales(self):
         self.sig_log.connect(self._log)
         self.sig_estado.connect(lambda s: self.lbl_estado.setText(f"Estado: {s}"))
-        self.sig_potencia.connect(lambda p: self.lbl_potencia.setText(f"Potencia medida: {p/1000:.3f} mW"))
+        self.sig_potencia.connect(self._on_potencia)
         self.sig_niveles.connect(self._actualizar_niveles)
         self.sig_niveles_spin.connect(self._actualizar_spinboxes)
         self.sig_error_poll.connect(self._manejar_error_poll)
         self.sig_detect_done.connect(self._on_detect_done)
+        self.sig_temperatura.connect(self._on_temperatura)
+        self.sig_estabilidad.connect(self._on_estabilidad)
+        self.sig_setp_resp.connect(self._on_setp_resp)
 
-    # ------- acciones -------
+    # ------- handlers -------
     def _log(self, msg: str):
         self.log.appendPlainText(msg)
+
+    def _on_potencia(self, p_uW: float):
+        p_mW = p_uW / 1000.0
+        self.lbl_potencia.setText(f"Potencia medida: {p_mW:.3f} mW")
+        # actualizar historial de estabilidad
+        self.estabilidad.agregar(time.time(), p_mW)
+        texto, frac, eta = self.estabilidad.estado()
+        self.sig_estabilidad.emit((texto, frac, eta))
+
+    def _on_estabilidad(self, datos):
+        texto, frac, eta = datos
+        color = {
+            "Estabilizado": "#3a7d3a",
+            "Estabilizando": "#b8860b",
+            "Calentando":   "#a04020",
+            "Sin emisión":  "#555",
+            "Sin datos":    "#555",
+        }.get(texto, "#444")
+        self.lbl_estab_pow.setText(f"Estabilidad: <span style='color:{color}'>{texto}</span>")
+        if frac is not None:
+            self.bar_estab.setValue(int(round(frac * 100)))
+        else:
+            self.bar_estab.setValue(0)
+        if eta is None or texto in ("Sin datos", "Sin emisión"):
+            self.lbl_eta.setText("ETA: —")
+        elif eta < 1.0:
+            self.lbl_eta.setText("ETA: < 1 s")
+        elif eta < 60:
+            self.lbl_eta.setText(f"ETA: ~ {eta:.0f} s")
+        else:
+            self.lbl_eta.setText(f"ETA: ~ {eta/60:.1f} min")
+
+    def _on_temperatura(self, datos):
+        temp, setpoint, tec_estado = datos
+        if temp is not None:
+            self.lbl_temp_actual.setText(f"Actual: {temp:.2f} °C")
+        else:
+            self.lbl_temp_actual.setText("Actual: —")
+        if setpoint is not None:
+            self.spn_temp.blockSignals(True)
+            self.spn_temp.setValue(setpoint)
+            self.spn_temp.blockSignals(False)
+        self.lbl_tec.setText(f"TEC: {tec_estado or '—'}")
+
+        # Estabilidad térmica
+        if temp is None or setpoint is None:
+            self.lbl_estab_temp.setText("Estabilidad térmica: —")
+        else:
+            delta = temp - setpoint
+            if abs(delta) < TOL_TEMP_C:
+                self.lbl_estab_temp.setText(
+                    f"<span style='color:#3a7d3a; font-weight:bold;'>Térmica estable</span> "
+                    f"(Δ = {delta:+.2f} °C)"
+                )
+            else:
+                self.lbl_estab_temp.setText(
+                    f"<span style='color:#a04020; font-weight:bold;'>Térmica fuera de tolerancia</span> "
+                    f"(Δ = {delta:+.2f} °C)"
+                )
+
+    def _on_setp_resp(self, pedido: str, respuesta: str):
+        if "access restricted" in respuesta.lower():
+            QMessageBox.warning(
+                self, "Setpoint restringido",
+                f"El firmware del iBeam Smart no permite cambiar el setpoint del TEC "
+                f"sin contraseña de mantenimiento (acceso restringido).\n\n"
+                f"El setpoint de fábrica suele ser 25.0 °C, valor estándar para esta "
+                f"familia de láseres y al que están calibrados los parámetros de potencia.\n\n"
+                f"Comando enviado: set temp {pedido}\nRespuesta: {respuesta}"
+            )
+        elif respuesta:
+            self._log(f"set temp {pedido} → {respuesta}")
+        else:
+            self._log(f"set temp {pedido} → OK")
 
     def _actualizar_niveles(self, niveles: dict):
         for canal, mW in niveles.items():
             if canal in self.lbl_nivel:
                 self.lbl_nivel[canal].setText(f"{mW:.3f} mW")
 
+    def _actualizar_spinboxes(self, niveles: dict):
+        for canal, mW in niveles.items():
+            if canal in self.spn_pow:
+                self.spn_pow[canal].blockSignals(True)
+                self.spn_pow[canal].setValue(mW)
+                self.spn_pow[canal].blockSignals(False)
+
+    # ------- conexión / detección -------
     def _auto_detectar(self, conectar_automaticamente: bool = True):
         self._auto_connect_pendiente = conectar_automaticamente
         self.btn_detectar.setEnabled(False)
@@ -294,7 +540,6 @@ class MainWindow(QMainWindow):
 
         def _tarea():
             puerto = detectar_puerto() or ""
-            # Emitir señal: cross-thread signal dispatch correcto
             self.sig_detect_done.emit(puerto)
         threading.Thread(target=_tarea, daemon=True).start()
 
@@ -328,23 +573,21 @@ class MainWindow(QMainWindow):
             self.btn_on.setEnabled(True)
             self.btn_off.setEnabled(True)
             self.timer_poll.start(INTERVALO_POLL_MS)
-            # Sincronizar GUI con el estado actual del dispositivo
+            self.estabilidad.reset()
             self._ejecutar_async(self._sincronizar_desde_dispositivo)
         except Exception as e:
             QMessageBox.critical(self, "Error de conexión", str(e))
 
     def _sincronizar_desde_dispositivo(self):
-        niveles = self.driver.leer_niveles()
+        niveles  = self.driver.leer_niveles()
+        setpoint = self.driver.leer_setpoint_temp_C()
+        temp     = self.driver.leer_temperatura_C()
+        tec      = self.driver.leer_estado_tec()
         self.sig_niveles.emit(niveles)
         self.sig_niveles_spin.emit(niveles)
-        self.sig_log.emit(f"Niveles leídos del dispositivo: {niveles}")
-
-    def _actualizar_spinboxes(self, niveles: dict):
-        for canal, mW in niveles.items():
-            if canal in self.spn_pow:
-                self.spn_pow[canal].blockSignals(True)
-                self.spn_pow[canal].setValue(mW)
-                self.spn_pow[canal].blockSignals(False)
+        self.sig_temperatura.emit((temp, setpoint, tec))
+        self.sig_log.emit(f"Niveles leídos: {niveles}")
+        self.sig_log.emit(f"TEC: {tec}, setpoint: {setpoint} °C, actual: {temp} °C")
 
     def _desconectar(self):
         self.timer_poll.stop()
@@ -357,18 +600,42 @@ class MainWindow(QMainWindow):
         self.btn_off.setEnabled(False)
         self.lbl_estado.setText("Estado: —")
         self.lbl_potencia.setText("Potencia medida: —")
+        self.lbl_temp_actual.setText("Actual: —")
+        self.lbl_tec.setText("TEC: —")
+        self.lbl_estab_temp.setText("Estabilidad térmica: —")
+        self.lbl_estab_pow.setText("Estabilidad: —")
+        self.lbl_eta.setText("ETA: —")
+        self.bar_estab.setValue(0)
         for lbl in self.lbl_nivel.values():
             lbl.setText("—")
+        self.estabilidad.reset()
         self._log("Desconectado")
 
+    # ------- acciones -------
     def _encender(self):
+        self.estabilidad.reset()
         self._ejecutar(lambda: self.driver.encender(), "la on")
 
     def _apagar(self):
         self._ejecutar(lambda: self.driver.apagar(), "la off")
 
     def _aplicar_potencia(self, canal: int, mW: float):
+        # un cambio de setpoint relanza la fase de estabilización
+        self.estabilidad.reset()
         self._ejecutar(lambda: self.driver.set_potencia(canal, mW), f"ch {canal} pow {mW:.3f}")
+
+    def _aplicar_temperatura(self):
+        if not self.driver.conectado():
+            self._log("!!! No conectado")
+            return
+        valor = self.spn_temp.value()
+        def _tarea():
+            try:
+                resp = self.driver.set_temperatura_C(valor)
+            except Exception as e:
+                resp = f"ERROR: {e}"
+            self.sig_setp_resp.emit(f"{valor:.2f}", resp)
+        threading.Thread(target=_tarea, daemon=True).start()
 
     def _ejecutar(self, accion, etiqueta: str):
         if not self.driver.conectado():
@@ -394,9 +661,15 @@ class MainWindow(QMainWindow):
                 estado   = self.driver.estado()
                 potencia = self.driver.leer_potencia_uW()
                 niveles  = self.driver.leer_niveles()
+                temp     = self.driver.leer_temperatura_C()
+                tec      = self.driver.leer_estado_tec()
+                # Setpoint cambia rara vez: solo lo refrescamos en sincronización inicial
+                setpoint = None
                 self.sig_estado.emit(estado)
                 self.sig_potencia.emit(potencia)
                 self.sig_niveles.emit(niveles)
+                self.sig_temperatura.emit((temp, setpoint if setpoint is not None
+                                            else self.spn_temp.value(), tec))
             except Exception as e:
                 self.sig_error_poll.emit(str(e))
         threading.Thread(target=_tarea, daemon=True).start()

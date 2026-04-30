@@ -24,8 +24,17 @@ puerto serie RS-232 (usando un adaptador USB-Serial). Incluye:
 - **Control de canales**: cada canal (CH1, CH2) se configura en mW de forma
   independiente; la salida del láser es la **suma** de los canales activos,
   por lo que para que el control sea intuitivo conviene dejar un canal en 0.
-- **Telemetría en vivo**: polling cada 700 ms del estado (`ON`/`OFF`) y la
-  potencia real medida por el fotodiodo interno.
+- **Telemetría en vivo**: polling cada 700 ms del estado (`ON`/`OFF`), la
+  potencia real medida por el fotodiodo interno y la temperatura del diodo.
+- **Control y monitoreo de temperatura (TEC)**: muestra el setpoint del TEC,
+  la temperatura medida y un indicador de estabilidad térmica
+  (|T − setpoint| < 0.3 °C). El campo de setpoint permite intentar fijar
+  un nuevo valor (ver *Acceso restringido al setpoint del TEC* más abajo).
+- **Indicador de estabilidad de potencia**: detecta si la potencia ya
+  alcanzó régimen estacionario (variación relativa < 0.5 % en una ventana
+  móvil de 8 s) y muestra una barra de progreso y un ETA estimado para
+  alcanzar la estabilidad. El ETA usa un modelo exponencial con τ ≈ 25 s
+  típico del calentamiento del diodo.
 - **Apagado seguro**: cerrar la ventana envía `la off` antes de liberar el
   puerto.
 
@@ -70,8 +79,9 @@ pip install pyinstaller
 
 ## Uso del script CLI
 
-`ibeam_encender.py` enciende el láser al 5 mW en CH1, mide la potencia durante
-5 s y guarda una gráfica.
+`ibeam_encender.py` enciende el láser a 5 mW en CH1 (CH2 = 0), adquiere
+durante 12 s la potencia y la temperatura del diodo, evalúa la estabilidad
+en tiempo real y guarda un gráfico de doble panel.
 
 ```bash
 source venv/bin/activate
@@ -81,21 +91,27 @@ python ibeam_encender.py
 Salida típica:
 
 ```
-Conectando a iBeam Smart en /dev/cu.usbserial-140 a 115200 baud ...
-Estado inicial : OFF
-Niveles        :
-CH1, PWR:  5.000 mW
+Conectando a iBeam Smart en /dev/cu.usbserial-1140 a 115200 baud ...
+Estado inicial    : OFF
+TEC               : ON, setpoint = 25.0 °C, actual = 25.0 °C
+Niveles           :
+CH1, PWR:  2.000 mW
 CH2, PWR:  0.000 mW
+
+Configurando CH1 a 5.0 mW (CH2 = 0 mW) ...
 Encendiendo láser ...
-Estado         : ON
-Potencia       : 5.010 mW
-Midiendo potencia durante 5 s ...
+Estado            : ON
+Potencia inicial  : 4.987 mW
+
+Adquiriendo potencia y temperatura durante 12 s ...
+  t=11.8 s  P=5.001 mW  T=25.00 °C  [ESTABLE       ]  ETA: 0 s
+
 Apagando láser ...
-Estado final   : OFF
+Estado final      : OFF
 Gráfico guardado: potencia_laser.png
 ```
 
-![Potencia vs tiempo](docs/img/potencia_laser.png)
+![Potencia y temperatura vs tiempo](docs/img/potencia_laser.png)
 
 > ⚠ El puerto está fijado en el script. Si tu adaptador se enumera en otra
 > posición, usa la función `detectar_puerto()` de `ibeam_gui.py` o importa
@@ -129,11 +145,21 @@ aplicación.
 2. **Configura las potencias**: escribe el setpoint en mW de CH1 y CH2 y pulsa
    *Aplicar* en cada canal. El campo *Nivel actual* refleja lo que el
    dispositivo tiene memorizado ahora mismo.
-3. **Enciende** pulsando el botón verde *Encender (LA ON)*. El área *Emisión*
+3. **Verifica la temperatura**: el bloque *Temperatura del diodo (TEC)*
+   muestra el setpoint del TEC (típicamente 25.0 °C de fábrica), la
+   temperatura medida y el estado del lazo termoeléctrico. Cuando
+   |T − setpoint| < 0.3 °C aparece *Térmica estable* en verde.
+4. **Enciende** pulsando el botón verde *Encender (LA ON)*. El área *Emisión*
    muestra `Estado: ON` y la potencia medida por el fotodiodo (mW).
-4. **Modula en vivo**: cambia el setpoint de un canal y pulsa *Aplicar*; el
-   cambio se refleja inmediatamente en la potencia medida.
-5. **Apaga** con *Apagar (LA OFF)* o simplemente cerrando la ventana
+5. **Observa la estabilización**: la barra y el rótulo *Estabilidad* indican
+   si el láser está *Calentando*, *Estabilizando* o *Estabilizado*. Junto
+   al ETA verás un tiempo estimado para alcanzar régimen estacionario
+   (criterio: variación relativa < 0.5 % en 8 s). Cada cambio de setpoint
+   reinicia esta medida.
+6. **Modula en vivo**: cambia el setpoint de un canal y pulsa *Aplicar*; el
+   cambio se refleja inmediatamente en la potencia medida y vuelve a contar
+   la estabilización.
+7. **Apaga** con *Apagar (LA OFF)* o simplemente cerrando la ventana
    (la app envía `la off` automáticamente antes de salir).
 
 ### Consideración sobre canales
@@ -142,6 +168,30 @@ La salida óptica del iBeam Smart equivale a la suma de los canales con
 contribución no-nula. **Si sólo quieres controlar CH1, deja CH2 en 0 mW**
 (los comandos `en`/`di` no siempre silencian la contribución del canal;
 fijar 0 mW sí).
+
+### Acceso restringido al setpoint del TEC
+
+El comando `set temp X` que utiliza la app está protegido en el firmware
+estándar del iBeam Smart y devuelve `%SYS-W-047, access restricted`. La
+app intercepta esa respuesta y muestra un aviso explicando que el setpoint
+de fábrica (25.0 °C, óptimo para esta familia y al que están calibrados
+los parámetros de potencia) no puede modificarse sin contraseña de
+mantenimiento de TOPTICA. Aun así, la lectura, el monitoreo y el
+indicador de estabilidad térmica funcionan siempre.
+
+### Cómo se calcula el ETA de estabilización
+
+Cada lectura de potencia (~1 s) se añade a una ventana móvil de 8 s. Sobre
+esa ventana se computan media, desviación estándar y pendiente por mínimos
+cuadrados. Sea `rel = max(std/media, |pendiente · ventana|/media)`. El
+láser se considera estable si `rel < 0.5 %`. En caso contrario, asumiendo
+una aproximación exponencial al régimen estacionario con
+`τ ≈ 25 s`, se estima
+
+  `ETA = τ · ln(rel / 0.5 %)`
+
+acotado a `[0, 600] s`. Es una estimación heurística — útil para tener
+una idea del orden de magnitud, no para sincronizar adquisiciones críticas.
 
 ---
 
@@ -183,14 +233,18 @@ El ejecutable queda en `dist\iBeamSmart.exe`.
 
 ## Comandos útiles del iBeam Smart (referencia)
 
-| Comando             | Acción                                         |
-|---------------------|------------------------------------------------|
-| `la on` / `la off`  | Encender / apagar la emisión                   |
-| `sta la`            | Devuelve `ON` / `OFF`                          |
-| `sh pow`            | Potencia medida por el fotodiodo (`PIC` en µW) |
-| `sh level pow`      | Setpoint actual de cada canal (mW)             |
-| `ch N pow X`        | Fijar setpoint del canal N a X mW              |
-| `en N` / `di N`     | Habilitar / deshabilitar canal N (†)           |
+| Comando             | Acción                                                |
+|---------------------|-------------------------------------------------------|
+| `la on` / `la off`  | Encender / apagar la emisión                          |
+| `sta la`            | Devuelve `ON` / `OFF`                                 |
+| `sh pow`            | Potencia medida por el fotodiodo (`PIC` en µW)        |
+| `sh level pow`      | Setpoint actual de cada canal (mW)                    |
+| `ch N pow X`        | Fijar setpoint del canal N a X mW                     |
+| `en N` / `di N`     | Habilitar / deshabilitar canal N (†)                  |
+| `sh temp`           | Temperatura actual del diodo (`TEMP = XXX.X C`)       |
+| `sta tec`           | Estado del lazo TEC (`ON` / `OFF`)                    |
+| `sh syst data`      | Bloque de configuración: incluye `TEC setpoint`       |
+| `set temp X`        | Fijar setpoint del TEC (acceso restringido por defecto)|
 | `sh ch`             | Estado detallado de canales                    |
 
 † No siempre silencia la contribución; usar `ch N pow 0` para garantizar que
