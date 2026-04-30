@@ -42,12 +42,12 @@ puerto serie RS-232 (usando un adaptador USB-Serial). Incluye:
 - **Gráficos en tiempo real (pestaña Control)**: potencia P(t) y temperatura
   T(t), ventana deslizante de 60 s, paleta dark con setpoints marcados.
 - **FINE — Feedback Induced Noise Eraser** (pestaña FINE/SKILL): activa el
-  lazo de retroalimentación con el fotodiodo interno en tres modos:
-  *Apagado*, *Modo A* (`fine a`) o *Modo B* (`fine b`). Estado leído del
-  dispositivo con `sta fine`.
+  lazo de retroalimentación con el fotodiodo interno mediante un **deslizador**
+  de tres posiciones: *Apagado* / *Modo A* (`fine a`) / *Modo B* (`fine b`).
+  Estado leído del dispositivo con `sta fine`. Incluye recuadro HELP en la UI.
 - **SKILL — Speckle Killer** (pestaña FINE/SKILL): reduce el speckle en
-  acoplamiento a fibra. Tres modos: *Apagado*, *Modo 1* (`skill 1`) o
-  *Modo 2* (`skill 2`). Estado rastreado localmente.
+  acoplamiento a fibra mediante **deslizador**: *Apagado* / *Modo 1* (`skill 1`) /
+  *Modo 2* (`skill 2`). Estado rastreado localmente. Incluye recuadro HELP en la UI.
 - **Gráficas a largo plazo** (pestaña FINE/SKILL): potencia P(t) en
   minutos (últimos 10 min) y ruido de intensidad σ/μ [%] como proxy de
   coherencia — disminuye a medida que el láser se estabiliza.
@@ -193,29 +193,36 @@ reducción de ruido e incoherencia:
 
 **FINE (Feedback Induced Noise Eraser)**
 Activa el lazo de retroalimentación interno con el fotodiodo integrado.
-Selecciona con los botones de radio:
-- *Apagado* — `fine off`
-- *Modo A (FINE 1)* — `fine on` + `fine a`
-- *Modo B (FINE 2)* — `fine on` + `fine b`
+Usa el **deslizador** horizontal con tres posiciones de encaje:
+
+| Posición | Comando enviado | Descripción |
+|----------|-----------------|-------------|
+| 0 — Apagado | `fine off` | Lazo desactivado |
+| 50 — Modo A | `fine on` + `fine a` | Reducción de ruido de baja frecuencia (≲ 100 Hz). Corrige ruido mecánico y de la corriente de bombeo. |
+| 100 — Modo B | `fine on` + `fine b` | Lazo extendido hasta ≈ 10 MHz. Reduce fluctuaciones rápidas de amplitud; ideal cuando la coherencia temporal es crítica. |
 
 El estado real del dispositivo se lee con `sta fine` cada ciclo de polling.
+Un pequeño recuadro **HELP** en la interfaz resume estos modos sin salir de la app.
 
 **SKILL (Speckle Killer)**
-Reduce el speckle al acoplar a fibra óptica. Selecciona:
-- *Apagado* — `skill off`
-- *Modo 1 (SKILL 1)* — `skill on` + `skill 1`
-- *Modo 2 (SKILL 2)* — `skill on` + `skill 2`
+Reduce el speckle al acoplar a fibra óptica. Usa el **deslizador** horizontal:
+
+| Posición | Comando enviado | Descripción |
+|----------|-----------------|-------------|
+| 0 — Apagado | `skill off` | Modulación desactivada |
+| 50 — Modo 1 | `skill on` + `skill 1` | Modulación de fase de baja amplitud (~π/4). Reducción leve de speckle; mínimo impacto en coherencia temporal. |
+| 100 — Modo 2 | `skill on` + `skill 2` | Modulación de fase de mayor amplitud (~π). Máxima supresión de speckle al acoplar a fibra multimodo. |
 
 El estado SKILL se rastrea localmente (el firmware de este modelo no expone
-`sta skill`).
+`sta skill`). Un recuadro **HELP** en la interfaz explica cada modo.
 
 **Gráficas de la pestaña FINE/SKILL**
 - *Potencia — últimos 10 min*: historial de potencia en escala de minutos.
   Útil para observar deriva térmica o el efecto de activar FINE.
-- *Ruido de intensidad [%] — proxy coherencia*: muestra σ/μ (%) calculado
+- *Ruido relativo σ/μ [%] — proxy coherencia*: muestra σ/μ (%) calculado
   sobre una ventana móvil de 30 s. Un valor bajo (< 0.5 %) indica emisión
   estable y alta coherencia de amplitud. La línea discontinua marca el
-  umbral de estabilidad.
+  umbral de estabilidad (0.5 %).
 
 ### Consideración sobre canales
 

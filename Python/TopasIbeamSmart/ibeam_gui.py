@@ -29,9 +29,9 @@ import serial
 from serial.tools import list_ports
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
-    QApplication, QButtonGroup, QDoubleSpinBox, QGridLayout, QGroupBox,
+    QApplication, QDoubleSpinBox, QFrame, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit,
-    QProgressBar, QPushButton, QRadioButton, QTabWidget, QVBoxLayout, QWidget,
+    QProgressBar, QPushButton, QSlider, QTabWidget, QVBoxLayout, QWidget,
 )
 
 import matplotlib
@@ -324,8 +324,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("iBeam Smart — Control")
-        self.setMinimumSize(980, 900)
-        self.resize(980, 940)
+        self.setMinimumSize(1020, 960)
+        self.resize(1020, 1000)
 
         self.driver      = IBeamDriver()
         self.estabilidad = EstabilidadPotencia()
@@ -499,7 +499,7 @@ class MainWindow(QMainWindow):
 
         gb_pp = QGroupBox("Potencia en tiempo real")
         lpp = QVBoxLayout(gb_pp)
-        fig_p, self.ax_pot = _make_fig(4.2, 2.6)
+        fig_p, self.ax_pot = _make_fig(4.8, 3.2)
         self.ax_pot.set_xlabel("t [s]"); self.ax_pot.set_ylabel("P [mW]")
         self.canvas_pot = FigureCanvas(fig_p)
         self.line_pot,     = self.ax_pot.plot([], [], color=C_POW,  lw=1.2,
@@ -510,7 +510,7 @@ class MainWindow(QMainWindow):
 
         gb_pt = QGroupBox("Temperatura en tiempo real")
         lpt = QVBoxLayout(gb_pt)
-        fig_t, self.ax_temp = _make_fig(4.2, 2.6)
+        fig_t, self.ax_temp = _make_fig(4.8, 3.2)
         self.ax_temp.set_xlabel("t [s]"); self.ax_temp.set_ylabel("T [°C]")
         self.canvas_temp = FigureCanvas(fig_t)
         self.line_temp,    = self.ax_temp.plot([], [], color=C_TEMP, lw=1.2,
@@ -525,45 +525,99 @@ class MainWindow(QMainWindow):
         lay.setSpacing(8)
 
         fila_ctrl = QHBoxLayout()
+        fila_ctrl.setSpacing(10)
 
-        # FINE
+        # ── FINE ──────────────────────────────────────────────────────────────
         gb_fine = QGroupBox("FINE — Feedback Induced Noise Eraser")
         lf = QVBoxLayout(gb_fine)
-        self.rb_fine = {}
-        bg_fine = QButtonGroup(self)
-        desc_fine = [("off", "Apagado"), ("a", "Modo A (FINE 1)"), ("b", "Modo B (FINE 2)")]
-        for val, etiqueta in desc_fine:
-            rb = QRadioButton(etiqueta)
-            rb.setStyleSheet("font-size:13px; padding:4px;")
-            if val == "off":
-                rb.setChecked(True)
-            bg_fine.addButton(rb)
-            rb.toggled.connect(lambda checked, v=val: self._on_fine_rb(v, checked))
-            lf.addWidget(rb)
-            self.rb_fine[val] = rb
+        lf.setSpacing(4)
+
+        self.sld_fine = QSlider(Qt.Orientation.Horizontal)
+        self.sld_fine.setRange(0, 100)
+        self.sld_fine.setValue(0)
+        self.sld_fine.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.sld_fine.setTickInterval(50)
+        self.sld_fine.setSingleStep(50)
+        self.sld_fine.setPageStep(50)
+        self.sld_fine.valueChanged.connect(self._on_fine_slider)
+        lf.addWidget(self.sld_fine)
+
+        fila_lf = QHBoxLayout()
+        fila_lf.addWidget(QLabel("Apagado"), 0, Qt.AlignmentFlag.AlignLeft)
+        fila_lf.addWidget(QLabel("Modo A"), 0, Qt.AlignmentFlag.AlignCenter)
+        fila_lf.addWidget(QLabel("Modo B"), 0, Qt.AlignmentFlag.AlignRight)
+        lf.addLayout(fila_lf)
+
         self.lbl_fine_estado = QLabel("Estado FINE: —")
-        self.lbl_fine_estado.setStyleSheet("color:#89b4fa;font-weight:bold;margin-top:6px;")
+        self.lbl_fine_estado.setStyleSheet(
+            "color:#89b4fa;font-weight:bold;margin-top:4px;")
         lf.addWidget(self.lbl_fine_estado)
+
+        frm_help_f = QFrame()
+        frm_help_f.setFrameShape(QFrame.Shape.StyledPanel)
+        frm_help_f.setStyleSheet(
+            "background-color:#2a2a3e;border:1px solid #45475a;border-radius:4px;")
+        lf_hf = QVBoxLayout(frm_help_f)
+        lf_hf.setContentsMargins(8, 6, 8, 6)
+        lbl_hf = QLabel(
+            "<b style='color:#89b4fa;'>HELP — FINE</b><br>"
+            "<b>Modo A:</b> lazo de retroalimentación de baja frecuencia (≲ 100 Hz).<br>"
+            "&nbsp;&nbsp;Corrige ruido mecánico y de la corriente de bombeo.<br>"
+            "<b>Modo B:</b> lazo extendido hasta ≈ 10 MHz.<br>"
+            "&nbsp;&nbsp;Reduce fluctuaciones rápidas de amplitud; ideal cuando "
+            "la coherencia temporal es crítica."
+        )
+        lbl_hf.setWordWrap(True)
+        lbl_hf.setStyleSheet("font-size:11px;color:#cdd6f4;")
+        lf_hf.addWidget(lbl_hf)
+        lf.addWidget(frm_help_f)
+
         fila_ctrl.addWidget(gb_fine, 1)
 
-        # SKILL
+        # ── SKILL ─────────────────────────────────────────────────────────────
         gb_skill = QGroupBox("SKILL — Speckle Killer")
         ls = QVBoxLayout(gb_skill)
-        self.rb_skill = {}
-        bg_skill = QButtonGroup(self)
-        desc_skill = [("off", "Apagado"), ("1", "Modo 1 (SKILL 1)"), ("2", "Modo 2 (SKILL 2)")]
-        for val, etiqueta in desc_skill:
-            rb = QRadioButton(etiqueta)
-            rb.setStyleSheet("font-size:13px; padding:4px;")
-            if val == "off":
-                rb.setChecked(True)
-            bg_skill.addButton(rb)
-            rb.toggled.connect(lambda checked, v=val: self._on_skill_rb(v, checked))
-            ls.addWidget(rb)
-            self.rb_skill[val] = rb
+        ls.setSpacing(4)
+
+        self.sld_skill = QSlider(Qt.Orientation.Horizontal)
+        self.sld_skill.setRange(0, 100)
+        self.sld_skill.setValue(0)
+        self.sld_skill.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.sld_skill.setTickInterval(50)
+        self.sld_skill.setSingleStep(50)
+        self.sld_skill.setPageStep(50)
+        self.sld_skill.valueChanged.connect(self._on_skill_slider)
+        ls.addWidget(self.sld_skill)
+
+        fila_ls = QHBoxLayout()
+        fila_ls.addWidget(QLabel("Apagado"), 0, Qt.AlignmentFlag.AlignLeft)
+        fila_ls.addWidget(QLabel("Modo 1"), 0, Qt.AlignmentFlag.AlignCenter)
+        fila_ls.addWidget(QLabel("Modo 2"), 0, Qt.AlignmentFlag.AlignRight)
+        ls.addLayout(fila_ls)
+
         self.lbl_skill_estado = QLabel("Estado SKILL: Apagado")
-        self.lbl_skill_estado.setStyleSheet("color:#a6e3a1;font-weight:bold;margin-top:6px;")
+        self.lbl_skill_estado.setStyleSheet(
+            "color:#a6e3a1;font-weight:bold;margin-top:4px;")
         ls.addWidget(self.lbl_skill_estado)
+
+        frm_help_s = QFrame()
+        frm_help_s.setFrameShape(QFrame.Shape.StyledPanel)
+        frm_help_s.setStyleSheet(
+            "background-color:#2a2a3e;border:1px solid #45475a;border-radius:4px;")
+        ls_hs = QVBoxLayout(frm_help_s)
+        ls_hs.setContentsMargins(8, 6, 8, 6)
+        lbl_hs = QLabel(
+            "<b style='color:#a6e3a1;'>HELP — SKILL</b><br>"
+            "<b>Modo 1:</b> modulación de fase de baja amplitud (~π/4).<br>"
+            "&nbsp;&nbsp;Reducción leve de speckle; mínimo impacto en coherencia temporal.<br>"
+            "<b>Modo 2:</b> modulación de fase de mayor amplitud (~π).<br>"
+            "&nbsp;&nbsp;Máxima supresión de speckle al acoplar a fibra multimodo."
+        )
+        lbl_hs.setWordWrap(True)
+        lbl_hs.setStyleSheet("font-size:11px;color:#cdd6f4;")
+        ls_hs.addWidget(lbl_hs)
+        ls.addWidget(frm_help_s)
+
         fila_ctrl.addWidget(gb_skill, 1)
 
         lay.addLayout(fila_ctrl)
@@ -585,18 +639,17 @@ class MainWindow(QMainWindow):
         ll.addWidget(self.canvas_long)
         fila_gr.addWidget(gb_long, 1)
 
-        gb_noise = QGroupBox("Ruido de intensidad [%] — proxy coherencia")
+        gb_noise = QGroupBox("Ruido de intensidad — proxy de coherencia de amplitud")
         ln = QVBoxLayout(gb_noise)
         fig_n, self.ax_noise = _make_fig(4.4, 3.2)
         self.ax_noise.set_xlabel("t [min]")
-        self.ax_noise.set_ylabel("σ/μ [%]")
+        self.ax_noise.set_ylabel("Ruido relativo σ/μ [%]")
         self.canvas_noise = FigureCanvas(fig_n)
         fig_n.set_facecolor(BG)
         self.line_noise, = self.ax_noise.plot([], [], color=C_NOISE, lw=1.4,
                                                marker=".", ms=3)
-        # Línea referencia 0.5 % = umbral de estabilidad
         self.ax_noise.axhline(0.5, color=C_SET, ls="--", lw=0.8,
-                              label="Umbral estabilidad")
+                              label="Umbral estabilidad (0.5 %)")
         self.ax_noise.legend(loc="upper right",
                              labelcolor=FG, facecolor=AX_BG,
                              edgecolor=GRID_COL, fontsize=7)
@@ -718,17 +771,20 @@ class MainWindow(QMainWindow):
 
     def _on_fine_estado(self, estado: str):
         self.lbl_fine_estado.setText(f"Estado FINE: {estado}")
-        # Sincronizar radio button si hay discrepancia
         if estado == "OFF" and self._fine_modo != "off":
             self._fine_modo = "off"
-            self.rb_fine["off"].blockSignals(True)
-            self.rb_fine["off"].setChecked(True)
-            self.rb_fine["off"].blockSignals(False)
+            self.sld_fine.blockSignals(True)
+            self.sld_fine.setValue(0)
+            self.sld_fine.blockSignals(False)
 
-    def _on_fine_rb(self, modo: str, checked: bool):
-        if not checked or not self.driver.conectado():
-            return
-        if modo == self._fine_modo:
+    def _on_fine_slider(self, valor: int):
+        snapped = min([0, 50, 100], key=lambda x: abs(x - valor))
+        if self.sld_fine.value() != snapped:
+            self.sld_fine.blockSignals(True)
+            self.sld_fine.setValue(snapped)
+            self.sld_fine.blockSignals(False)
+        modo = {0: "off", 50: "a", 100: "b"}[snapped]
+        if modo == self._fine_modo or not self.driver.conectado():
             return
         self._fine_modo = modo
         def _t():
@@ -740,10 +796,14 @@ class MainWindow(QMainWindow):
                 self.sig_log.emit(f"!!! fine {modo}  ERROR: {e}")
         threading.Thread(target=_t, daemon=True).start()
 
-    def _on_skill_rb(self, modo: str, checked: bool):
-        if not checked or not self.driver.conectado():
-            return
-        if modo == self._skill_modo:
+    def _on_skill_slider(self, valor: int):
+        snapped = min([0, 50, 100], key=lambda x: abs(x - valor))
+        if self.sld_skill.value() != snapped:
+            self.sld_skill.blockSignals(True)
+            self.sld_skill.setValue(snapped)
+            self.sld_skill.blockSignals(False)
+        modo = {0: "off", 50: "1", 100: "2"}[snapped]
+        if modo == self._skill_modo or not self.driver.conectado():
             return
         self._skill_modo = modo
         etiqueta = {"off": "Apagado", "1": "Modo 1", "2": "Modo 2"}[modo]
@@ -944,6 +1004,10 @@ class MainWindow(QMainWindow):
         for lbl in self.lbl_nivel.values():
             lbl.setText("—")
         self.lbl_fine_estado.setText("Estado FINE: —")
+        self.lbl_skill_estado.setText("Estado SKILL: Apagado")
+        self.sld_fine.blockSignals(True); self.sld_fine.setValue(0); self.sld_fine.blockSignals(False)
+        self.sld_skill.blockSignals(True); self.sld_skill.setValue(0); self.sld_skill.blockSignals(False)
+        self._fine_modo = "off"; self._skill_modo = "off"
         self.estabilidad.reset()
         self.estab_ruido.reset()
         self._reset_graficos()
