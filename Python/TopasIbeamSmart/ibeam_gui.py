@@ -34,6 +34,12 @@ from PyQt6.QtWidgets import (
     QPushButton, QVBoxLayout, QWidget,
 )
 
+# Backend Qt de matplotlib para embeber gráficos en la GUI
+import matplotlib
+matplotlib.use("QtAgg")
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
 
 BAUD               = 115200
 TIMEOUT            = 1.5
@@ -48,6 +54,9 @@ TAU_DIODO_S        = 25.0    # constante térmica típica del diodo (warmup)
 
 # Estabilidad térmica
 TOL_TEMP_C         = 0.30    # |T - setpoint| < 0.3 °C => térmica estable
+
+# Gráficos en tiempo real
+VENTANA_PLOT_S     = 60.0    # ventana visible en los gráficos en vivo
 
 
 # --------------------------------------------------------------------------
@@ -285,9 +294,15 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("iBeam Smart - Control")
-        self.setFixedSize(560, 760)
+        self.setMinimumSize(960, 820)
+        self.resize(960, 880)
         self.driver = IBeamDriver()
         self.estabilidad = EstabilidadPotencia()
+
+        # Historial para gráficos en tiempo real
+        self._t0_grafica: float | None = None
+        self._hist_pot:  deque[tuple[float, float]] = deque()
+        self._hist_temp: deque[tuple[float, float]] = deque()
 
         self._construir_ui()
         self._conectar_senales()
@@ -417,12 +432,46 @@ class MainWindow(QMainWindow):
         lay_em.addWidget(self.bar_estab)
         layout.addWidget(gb_em)
 
+        # Gráficos en tiempo real (potencia y temperatura, en paralelo)
+        fila_plots = QHBoxLayout()
+        fila_plots.setSpacing(8)
+
+        gb_plot_p = QGroupBox("Potencia en tiempo real")
+        lay_plot_p = QVBoxLayout(gb_plot_p)
+        fig_p = Figure(figsize=(4.2, 2.6), tight_layout=True)
+        self.canvas_pot = FigureCanvas(fig_p)
+        self.ax_pot = fig_p.add_subplot(111)
+        self.ax_pot.set_xlabel("t [s]")
+        self.ax_pot.set_ylabel("P [mW]")
+        self.ax_pot.grid(True, alpha=0.3)
+        self.line_pot, = self.ax_pot.plot([], [], "b.-", markersize=3)
+        self.line_pot_set = self.ax_pot.axhline(0, color="gray", linestyle="--",
+                                                 linewidth=0.8, visible=False)
+        lay_plot_p.addWidget(self.canvas_pot)
+        fila_plots.addWidget(gb_plot_p, 1)
+
+        gb_plot_t = QGroupBox("Temperatura en tiempo real")
+        lay_plot_t = QVBoxLayout(gb_plot_t)
+        fig_t = Figure(figsize=(4.2, 2.6), tight_layout=True)
+        self.canvas_temp = FigureCanvas(fig_t)
+        self.ax_temp = fig_t.add_subplot(111)
+        self.ax_temp.set_xlabel("t [s]")
+        self.ax_temp.set_ylabel("T [°C]")
+        self.ax_temp.grid(True, alpha=0.3)
+        self.line_temp, = self.ax_temp.plot([], [], "r.-", markersize=3)
+        self.line_temp_set = self.ax_temp.axhline(25.0, color="gray", linestyle="--",
+                                                   linewidth=0.8, label="Setpoint")
+        lay_plot_t.addWidget(self.canvas_temp)
+        fila_plots.addWidget(gb_plot_t, 1)
+        layout.addLayout(fila_plots)
+
         # Log
         gb_log = QGroupBox("Log")
         lay_log = QVBoxLayout(gb_log)
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(500)
+        self.log.setMaximumHeight(140)
         self.log.setStyleSheet("background-color: #111; color: #0f0; font-family: Menlo; font-size: 11px;")
         lay_log.addWidget(self.log)
         layout.addWidget(gb_log)
@@ -448,10 +497,18 @@ class MainWindow(QMainWindow):
     def _on_potencia(self, p_uW: float):
         p_mW = p_uW / 1000.0
         self.lbl_potencia.setText(f"Potencia medida: {p_mW:.3f} mW")
+        ahora = time.time()
         # actualizar historial de estabilidad
-        self.estabilidad.agregar(time.time(), p_mW)
+        self.estabilidad.agregar(ahora, p_mW)
         texto, frac, eta = self.estabilidad.estado()
         self.sig_estabilidad.emit((texto, frac, eta))
+        # actualizar gráfico de potencia
+        if self._t0_grafica is None:
+            self._t0_grafica = ahora
+        t_rel = ahora - self._t0_grafica
+        self._hist_pot.append((t_rel, p_mW))
+        self._recortar_hist(self._hist_pot, t_rel)
+        self._refrescar_plot_pot()
 
     def _on_estabilidad(self, datos):
         texto, frac, eta = datos
@@ -486,6 +543,7 @@ class MainWindow(QMainWindow):
             self.spn_temp.blockSignals(True)
             self.spn_temp.setValue(setpoint)
             self.spn_temp.blockSignals(False)
+            self.line_temp_set.set_ydata([setpoint, setpoint])
         self.lbl_tec.setText(f"TEC: {tec_estado or '—'}")
 
         # Estabilidad térmica
@@ -503,6 +561,16 @@ class MainWindow(QMainWindow):
                     f"<span style='color:#a04020; font-weight:bold;'>Térmica fuera de tolerancia</span> "
                     f"(Δ = {delta:+.2f} °C)"
                 )
+
+        # Actualizar gráfico de temperatura
+        if temp is not None:
+            ahora = time.time()
+            if self._t0_grafica is None:
+                self._t0_grafica = ahora
+            t_rel = ahora - self._t0_grafica
+            self._hist_temp.append((t_rel, temp))
+            self._recortar_hist(self._hist_temp, t_rel)
+            self._refrescar_plot_temp(setpoint)
 
     def _on_setp_resp(self, pedido: str, respuesta: str):
         if "access restricted" in respuesta.lower():
@@ -523,6 +591,53 @@ class MainWindow(QMainWindow):
         for canal, mW in niveles.items():
             if canal in self.lbl_nivel:
                 self.lbl_nivel[canal].setText(f"{mW:.3f} mW")
+        # Actualizar la línea de setpoint en el gráfico de potencia
+        if niveles:
+            total = sum(niveles.values())
+            self.line_pot_set.set_ydata([total, total])
+            self.line_pot_set.set_visible(total > 0.0)
+
+    @staticmethod
+    def _recortar_hist(hist: deque, t_actual: float):
+        t_min = t_actual - VENTANA_PLOT_S
+        while hist and hist[0][0] < t_min:
+            hist.popleft()
+
+    def _refrescar_plot_pot(self):
+        if not self._hist_pot:
+            return
+        xs = [t for t, _ in self._hist_pot]
+        ys = [p for _, p in self._hist_pot]
+        self.line_pot.set_data(xs, ys)
+        t_max = xs[-1]
+        t_min = max(0.0, t_max - VENTANA_PLOT_S)
+        self.ax_pot.set_xlim(t_min, max(t_max, t_min + 1.0))
+        # Y limits con margen
+        y_lo, y_hi = min(ys), max(ys)
+        if self.line_pot_set.get_visible():
+            sp = float(self.line_pot_set.get_ydata()[0])
+            y_lo, y_hi = min(y_lo, sp), max(y_hi, sp)
+        margen = max(0.05 * max(abs(y_hi), 1e-3), 0.02)
+        self.ax_pot.set_ylim(y_lo - margen, y_hi + margen)
+        self.canvas_pot.draw_idle()
+
+    def _refrescar_plot_temp(self, setpoint: float | None):
+        if not self._hist_temp:
+            return
+        xs = [t for t, _ in self._hist_temp]
+        ys = [T for _, T in self._hist_temp]
+        self.line_temp.set_data(xs, ys)
+        t_max = xs[-1]
+        t_min = max(0.0, t_max - VENTANA_PLOT_S)
+        self.ax_temp.set_xlim(t_min, max(t_max, t_min + 1.0))
+        y_lo, y_hi = min(ys), max(ys)
+        if setpoint is not None:
+            y_lo, y_hi = min(y_lo, setpoint), max(y_hi, setpoint)
+        # Mantener al menos ±1 °C alrededor del setpoint o el rango medido
+        centro = setpoint if setpoint is not None else (y_lo + y_hi) / 2.0
+        amplitud = max(1.0, y_hi - y_lo)
+        self.ax_temp.set_ylim(centro - amplitud, centro + amplitud)
+        self.canvas_temp.draw_idle()
 
     def _actualizar_spinboxes(self, niveles: dict):
         for canal, mW in niveles.items():
@@ -574,6 +689,7 @@ class MainWindow(QMainWindow):
             self.btn_off.setEnabled(True)
             self.timer_poll.start(INTERVALO_POLL_MS)
             self.estabilidad.reset()
+            self._reset_graficos()
             self._ejecutar_async(self._sincronizar_desde_dispositivo)
         except Exception as e:
             QMessageBox.critical(self, "Error de conexión", str(e))
@@ -609,7 +725,23 @@ class MainWindow(QMainWindow):
         for lbl in self.lbl_nivel.values():
             lbl.setText("—")
         self.estabilidad.reset()
+        self._reset_graficos()
         self._log("Desconectado")
+
+    def _reset_graficos(self):
+        """Vacía los buffers de los gráficos en tiempo real y los redibuja."""
+        self._t0_grafica = None
+        self._hist_pot.clear()
+        self._hist_temp.clear()
+        self.line_pot.set_data([], [])
+        self.line_temp.set_data([], [])
+        self.line_pot_set.set_visible(False)
+        self.ax_pot.set_xlim(0, VENTANA_PLOT_S)
+        self.ax_pot.set_ylim(0, 1)
+        self.ax_temp.set_xlim(0, VENTANA_PLOT_S)
+        self.ax_temp.set_ylim(24, 26)
+        self.canvas_pot.draw_idle()
+        self.canvas_temp.draw_idle()
 
     # ------- acciones -------
     def _encender(self):

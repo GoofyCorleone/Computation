@@ -35,6 +35,10 @@ puerto serie RS-232 (usando un adaptador USB-Serial). Incluye:
   móvil de 8 s) y muestra una barra de progreso y un ETA estimado para
   alcanzar la estabilidad. El ETA usa un modelo exponencial con τ ≈ 25 s
   típico del calentamiento del diodo.
+- **Gráficos en tiempo real**: dos paneles en paralelo embebidos en la app
+  — potencia P(t) y temperatura T(t) — que se actualizan en vivo cada 700 ms
+  con una ventana deslizante de 60 s. Cada gráfico incluye la línea de
+  setpoint de referencia.
 - **Apagado seguro**: cerrar la ventana envía `la off` antes de liberar el
   puerto.
 
@@ -156,10 +160,16 @@ aplicación.
    al ETA verás un tiempo estimado para alcanzar régimen estacionario
    (criterio: variación relativa < 0.5 % en 8 s). Cada cambio de setpoint
    reinicia esta medida.
-6. **Modula en vivo**: cambia el setpoint de un canal y pulsa *Aplicar*; el
+6. **Sigue los gráficos en tiempo real**: debajo del panel de emisión
+   aparecen dos gráficas en paralelo que se actualizan cada ~700 ms:
+   - **Potencia en tiempo real** — curva azul con línea gris discontinua en
+     el setpoint actual (suma de canales).
+   - **Temperatura en tiempo real** — curva roja con línea en el setpoint
+     del TEC. La ventana muestra los últimos 60 s y se desplaza sola.
+7. **Modula en vivo**: cambia el setpoint de un canal y pulsa *Aplicar*; el
    cambio se refleja inmediatamente en la potencia medida y vuelve a contar
-   la estabilización.
-7. **Apaga** con *Apagar (LA OFF)* o simplemente cerrando la ventana
+   la estabilización. Los gráficos continúan acumulando historia.
+8. **Apaga** con *Apagar (LA OFF)* o simplemente cerrando la ventana
    (la app envía `la off` automáticamente antes de salir).
 
 ### Consideración sobre canales
@@ -197,16 +207,16 @@ una idea del orden de magnitud, no para sincronizar adquisiciones críticas.
 
 ## Empaquetado como app nativa
 
-Se usa PyInstaller con exclusión de módulos pesados no utilizados y firma
-ad-hoc para evitar que Gatekeeper re-escanee el binario en cada arranque:
+Se usa PyInstaller con exclusión de módulos no utilizados y firma ad-hoc
+para evitar que Gatekeeper re-escanee el binario en cada arranque.
+Matplotlib y NumPy se incluyen ahora para los gráficos en tiempo real:
 
 ```bash
 source venv/bin/activate
-pip install pyinstaller
+pip install pyinstaller Pillow
 pyinstaller --windowed --name "iBeamSmart" --noconfirm --optimize 2 \
-  --exclude-module tkinter --exclude-module unittest --exclude-module pydoc \
-  --exclude-module test --exclude-module matplotlib --exclude-module numpy \
-  --exclude-module scipy --exclude-module PIL \
+  --exclude-module tkinter --exclude-module pydoc --exclude-module test \
+  --exclude-module scipy \
   --exclude-module PyQt6.QtQml --exclude-module PyQt6.QtQuick \
   --exclude-module PyQt6.QtOpenGL --exclude-module PyQt6.QtMultimedia \
   ibeam_gui.py
@@ -215,8 +225,8 @@ xattr -cr dist/iBeamSmart.app
 codesign --force --deep --sign - dist/iBeamSmart.app
 ```
 
-Resultado: `dist/iBeamSmart.app` (~74 MB), arranque en ~0.2 s tras el primer
-lanzamiento.
+Resultado: `dist/iBeamSmart.app` (~107 MB), arranque en ~0.5 s tras el primer
+lanzamiento (matplotlib construye la caché de fuentes en el primer uso).
 
 ### Para Windows
 
