@@ -1,16 +1,25 @@
-# TOPTICA iBeam Smart — Control
+# TOPTICA iBeam Smart + Thorlabs SPCM50A/M — Control
 
-Control por software de un láser diodo **TOPTICA iBeam Smart** a través de su
-puerto serie RS-232 (usando un adaptador USB-Serial). Incluye:
+Software de control para el láser diodo **TOPTICA iBeam Smart** (RS-232) y
+para el contador de fotones **Thorlabs SPCM50A/M** (USB HID). Incluye:
 
+**Láser TOPTICA iBeam Smart**
 - **Script CLI** (`ibeam_encender.py`) — enciende el láser, mide potencia y
   temperatura, grafica la evolución temporal y apaga.
 - **GUI** (`ibeam_gui.py`) — aplicación PyQt6 con dos pestañas:
   *Control* (potencia, temperatura, estabilidad, gráficas P(t)/T(t)) y
-  *FINE / SKILL* (control de ruido e incoherencia de speckle, gráficas
-  P(t) a largo plazo y ruido de intensidad).
-- **App macOS** (`dist/iBeamSmart.app`) — la GUI empaquetada como
-  aplicación nativa (PyInstaller).
+  *FINE / SKILL* (deslizadores 0–2 para control de ruido e incoherencia de
+  speckle, recuadros HELP, gráficas a largo plazo).
+- **App macOS** (`dist/iBeamSmart.app`) — empaquetada con PyInstaller.
+
+**Thorlabs SPCM50A/M — Single Photon Counter**
+- **GUI** (`spcm_gui.py`) — aplicación PyQt6 con dos pestañas:
+  *Medición* (display digital de tasa de conteo, T integración, modo
+  continuo/única, umbral de alerta, estadísticas en vivo, gráfica P(t)) y
+  *Análisis* (histograma, traza 10 min, estadísticas globales, exportación CSV).
+- **App macOS** (`dist/SPCM50AM.app`) — empaquetada con PyInstaller.
+- **Modo simulación** automático si el dispositivo no está conectado
+  (distribución de Poisson + deriva lenta realista).
 
 | Pestaña Control | Pestaña FINE / SKILL |
 |---|---|
@@ -323,15 +332,77 @@ un canal no contribuye a la salida.
 
 ```
 TopasIbeamSmart/
-├── ibeam_encender.py        # Script CLI + gráfica de potencia y temperatura
-├── ibeam_gui.py             # GUI PyQt6 (driver + dos pestañas + gráficas)
-├── dist/                    # App empaquetada (PyInstaller)
-│   └── iBeamSmart.app
+├── ibeam_encender.py        # CLI: enciende, mide y apaga el láser
+├── ibeam_gui.py             # GUI PyQt6 iBeam Smart (2 pestañas + gráficas)
+├── spcm_gui.py              # GUI PyQt6 SPCM50A/M (2 pestañas + gráficas)
+├── dist/
+│   ├── iBeamSmart.app       # App macOS — control del láser
+│   └── SPCM50AM.app         # App macOS — contador de fotones
 ├── docs/img/
-│   ├── gui_tab1.png         # Captura pestaña Control
-│   ├── gui_tab2.png         # Captura pestaña FINE / SKILL
-│   ├── gui_main.png         # Captura principal (igual a gui_tab1)
+│   ├── gui_tab1.png         # Captura pestaña Control (láser)
+│   ├── gui_tab2.png         # Captura pestaña FINE / SKILL (láser)
 │   └── potencia_laser.png   # Última ejecución del script CLI
 ├── potencia_laser.png       # Última ejecución del script CLI
 └── README.md
+```
+
+---
+
+## GUI del SPCM50A/M — Uso
+
+### Desde fuente
+
+```bash
+source venv/bin/activate
+pip install hid          # biblioteca USB HID (solo primera vez)
+python spcm_gui.py
+```
+
+### Desde la app empaquetada (macOS)
+
+```bash
+open dist/SPCM50AM.app
+```
+
+### Funcionalidades
+
+| Pestaña | Función |
+|---------|---------|
+| **Medición** | Display digital (cps / kcps / Mcps), T integración 1 ms–10 s, modo continuo / única adquisición, umbral de alerta, estadísticas en vivo (μ, σ, SNR, σ/μ), gráfica tasa vs tiempo (60 s) |
+| **Análisis** | Histograma de tasas, traza 10 min, estadísticas globales de sesión, exportación CSV con timestamps |
+
+Si el SPCM no está conectado la app arranca automáticamente en **modo simulación**
+(fotocuentas Poisson + deriva lenta realista).
+
+### Conectar el hardware
+
+El SPCM50A/M se comunica por USB HID (Thorlabs VID = `0x1313`).
+Para encontrar el PID exacto de tu unidad:
+
+```bash
+python -c "
+import hid
+for d in hid.enumerate(0x1313, 0):
+    print(hex(d['vendor_id']), hex(d['product_id']), d.get('product_string',''))
+"
+```
+
+Actualiza `SPCM_PID` en `spcm_gui.py` con el valor obtenido y luego implementa
+`DriverSPCM.leer_conteos()` según el protocolo HID real (ver docstring).
+
+### Empaquetado como app macOS
+
+```bash
+source venv/bin/activate
+pip install pyinstaller hid
+pyinstaller --windowed --name "SPCM50AM" --noconfirm --optimize 2 \
+  --exclude-module tkinter --exclude-module pydoc --exclude-module test \
+  --exclude-module scipy \
+  --exclude-module PyQt6.QtQml --exclude-module PyQt6.QtQuick \
+  --exclude-module PyQt6.QtOpenGL --exclude-module PyQt6.QtMultimedia \
+  --hidden-import hid \
+  spcm_gui.py
+
+xattr -cr dist/SPCM50AM.app
+codesign --force --deep --sign - dist/SPCM50AM.app
 ```
