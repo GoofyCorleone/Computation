@@ -52,10 +52,13 @@ libusb-1.0.dylib (–add-binary).
 """
 
 import csv
+import ctypes.util
 import math
+import os
 import sys
 import threading
 import time
+import traceback
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -63,16 +66,17 @@ from pathlib import Path
 import numpy as np
 import usb.core
 import usb.util
+import usb.backend.libusb1
 
 from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QFont, QIcon, QPalette, QColor
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
     QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QMainWindow, QMessageBox, QProgressBar,
-    QPushButton, QSizePolicy, QSpinBox, QSplitter, QStatusBar,
-    QStyle, QTabWidget, QTableWidget, QTableWidgetItem, QToolBar,
-    QVBoxLayout, QWidget,
+    QHeaderView, QLabel, QMainWindow, QMessageBox, QPlainTextEdit,
+    QProgressBar, QPushButton, QSizePolicy, QSpinBox, QSplitter,
+    QStatusBar, QStyle, QTabWidget, QTableWidget, QTableWidgetItem,
+    QToolBar, QVBoxLayout, QWidget,
 )
 
 import matplotlib
@@ -110,6 +114,94 @@ EP_BULK_OUT     = 0x02      # comandos al dispositivo
 EP_BULK_IN      = 0x82      # respuesta del dispositivo
 EP_INT_IN       = 0x81      # estado / eventos
 TIMEOUT_USB_MS  = 2000
+
+
+# ── Backend libusb ──────────────────────────────────────────────────────────
+# PyInstaller no añade los dylibs del bundle al search path de ctypes,
+# así que cargamos libusb explícitamente desde el bundle si existe.
+_DIAG_LIBUSB: list[str] = []
+
+
+def _localizar_libusb() -> str | None:
+    """Busca libusb-1.0.dylib en rutas conocidas. Devuelve la primera
+    coincidencia. Registra cada intento en _DIAG_LIBUSB para diagnóstico."""
+    candidatos: list[str] = []
+
+    # 1) Bundle PyInstaller
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", "")
+        if meipass:
+            candidatos += [
+                os.path.join(meipass, "libusb-1.0.dylib"),
+                os.path.join(meipass, "libusb-1.0.0.dylib"),
+            ]
+        # En .app, los dylibs van a Contents/Frameworks
+        exe_dir = os.path.dirname(sys.executable)
+        candidatos += [
+            os.path.normpath(os.path.join(exe_dir, "..", "Frameworks",
+                                          "libusb-1.0.dylib")),
+            os.path.normpath(os.path.join(exe_dir, "..", "Frameworks",
+                                          "libusb-1.0.0.dylib")),
+        ]
+
+    # 2) Homebrew (intel + arm)
+    candidatos += [
+        "/opt/homebrew/lib/libusb-1.0.dylib",
+        "/opt/homebrew/lib/libusb-1.0.0.dylib",
+        "/usr/local/lib/libusb-1.0.dylib",
+        "/usr/local/lib/libusb-1.0.0.dylib",
+    ]
+
+    # 3) ctypes.util.find_library por si está en DYLD_LIBRARY_PATH
+    via_ctypes = ctypes.util.find_library("usb-1.0")
+    if via_ctypes:
+        candidatos.append(via_ctypes)
+
+    for ruta in candidatos:
+        if ruta and os.path.isfile(ruta):
+            _DIAG_LIBUSB.append(f"OK   {ruta}")
+            return ruta
+        else:
+            _DIAG_LIBUSB.append(f"miss {ruta}")
+    return None
+
+
+def _crear_backend():
+    """Crea un backend de PyUSB libusb1 cargando la dylib del bundle si hace falta."""
+    ruta = _localizar_libusb()
+    if ruta is None:
+        _DIAG_LIBUSB.append("→ Ningún libusb encontrado; usando backend default")
+        return None
+    try:
+        backend = usb.backend.libusb1.get_backend(find_library=lambda _x: ruta)
+        if backend is None:
+            _DIAG_LIBUSB.append(f"→ get_backend devolvió None con {ruta}")
+        else:
+            _DIAG_LIBUSB.append(f"→ Backend OK con {ruta}")
+        return backend
+    except Exception as e:
+        _DIAG_LIBUSB.append(f"→ Error cargando {ruta}: {e}")
+        return None
+
+
+# Backend global, creado una sola vez
+_USB_BACKEND = _crear_backend()
+
+# Volcar diagnóstico también a un archivo en /tmp (clave para debugging
+# cuando la app se lanza como .app bundle y no se ve la salida estándar).
+try:
+    diag_path = "/tmp/spcm_gui_diag.log"
+    with open(diag_path, "w", encoding="utf-8") as _f:
+        _f.write("── SPCM50A/M GUI startup diagnostic ──\n")
+        _f.write(f"frozen={getattr(sys, 'frozen', False)}\n")
+        _f.write(f"executable={sys.executable}\n")
+        _f.write(f"_MEIPASS={getattr(sys, '_MEIPASS', '<n/a>')}\n")
+        _f.write(f"backend={_USB_BACKEND}\n\n")
+        _f.write("── libusb search ──\n")
+        for l in _DIAG_LIBUSB:
+            _f.write(f"  {l}\n")
+except Exception:
+    pass
 
 # Paleta dark (Catppuccin Mocha — idéntica a ibeam_gui.py)
 COL_BG     = "#1e1e2e"
@@ -286,14 +378,20 @@ def _leer_string_descriptor(dev, idx) -> str:
         return ""
 
 
-def candidatos_spcm() -> list[dict]:
+def candidatos_spcm() -> tuple[list[dict], str]:
     """
-    Devuelve los dispositivos USB compatibles con el Thorlabs SPCM50A/M.
-    Cada elemento: {dev, vid, pid, manufacturer, product, serial_number, score}.
+    Devuelve (lista_candidatos, mensaje_diagnostico).
+    Cada candidato: {dev, vid, pid, manufacturer, product, serial_number, score}.
     """
     candidatos = []
+    diag_lines: list[str] = list(_DIAG_LIBUSB)
     try:
-        for d in usb.core.find(find_all=True, idVendor=THORLABS_VID):
+        kw = {"find_all": True, "idVendor": THORLABS_VID}
+        if _USB_BACKEND is not None:
+            kw["backend"] = _USB_BACKEND
+        encontrados = list(usb.core.find(**kw))
+        diag_lines.append(f"usb.core.find(VID=0x1313): {len(encontrados)} dispositivo(s)")
+        for d in encontrados:
             manuf = _leer_string_descriptor(d, d.iManufacturer)
             prod  = _leer_string_descriptor(d, d.iProduct)
             sn    = _leer_string_descriptor(d, d.iSerialNumber)
@@ -309,17 +407,21 @@ def candidatos_spcm() -> list[dict]:
                 "serial_number": sn,
                 "score":        score,
             })
-    except Exception:
-        pass
+    except usb.core.NoBackendError as e:
+        diag_lines.append(f"[!] NoBackendError: {e}")
+    except Exception as e:
+        diag_lines.append(f"[!] Error en usb.core.find: {e!r}")
+        diag_lines.append(traceback.format_exc())
     candidatos.sort(key=lambda d: d["score"], reverse=True)
-    return candidatos
+    return candidatos, "\n".join(diag_lines)
 
 
-def detectar_spcm() -> dict | None:
-    cs = candidatos_spcm()
+def detectar_spcm() -> tuple[dict | None, str]:
+    """Devuelve (info_o_None, mensaje_diagnostico)."""
+    cs, diag = candidatos_spcm()
     if cs and cs[0]["score"] >= 100:
-        return cs[0]
-    return None
+        return cs[0], diag
+    return None, diag
 
 
 class DriverSPCM:
@@ -605,6 +707,20 @@ class MainWindow(QMainWindow):
         splitter.setCollapsible(1, False)
         lay.addWidget(splitter, 1)
 
+        # Log compartido (siempre visible) — clave para debugging USB
+        gb_log = QGroupBox("Log")
+        ll = QVBoxLayout(gb_log); ll.setContentsMargins(4, 6, 4, 4)
+        self.log_widget = QPlainTextEdit()
+        self.log_widget.setReadOnly(True)
+        self.log_widget.setMaximumBlockCount(1000)
+        self.log_widget.setMaximumHeight(120)
+        self.log_widget.setStyleSheet(
+            "background:#11111b;color:#a6e3a1;"
+            "font-family:Menlo,Consolas,monospace;font-size:10px;"
+            f"border:1px solid {COL_BORDE};")
+        ll.addWidget(self.log_widget)
+        lay.addWidget(gb_log)
+
         # Status bar
         self._construir_status_bar()
 
@@ -889,7 +1005,11 @@ class MainWindow(QMainWindow):
             return
         self._log("Auto-detección de SPCM50A …")
         def _t():
-            info = detectar_spcm()
+            info, diag = detectar_spcm()
+            # Emitir diagnóstico al log siempre — clave para depurar
+            for linea in (diag or "").splitlines():
+                if linea.strip():
+                    self.sig_log.emit(f"  [USB] {linea}")
             if info is None:
                 self.sig_log.emit(
                     "Ningún dispositivo Thorlabs detectado — "
@@ -904,16 +1024,16 @@ class MainWindow(QMainWindow):
                 self._driver = drv
                 self._simulacion = False
                 serial_txt = (f"SPCM50A {info.get('serial_number','?')}  "
-                              f"({info['device']})")
+                              f"(VID={hex(info['vid'])} PID={hex(info['pid'])})")
                 self.sig_conexion.emit(True, serial_txt)
                 self.sig_log.emit(
-                    f"Conectado: {info['device']}  "
+                    f"Conectado: {info.get('product','SPCM50A')}  "
                     f"S/N={info.get('serial_number','?')}  "
-                    f"desc='{info.get('description','')}'  "
+                    f"VID={hex(info['vid'])} PID={hex(info['pid'])}  "
                     f"score={info['score']}")
             except Exception as e:
                 self.sig_log.emit(
-                    f"Error abriendo {info['device']}: {e}  → simulación.")
+                    f"Error abriendo {info.get('product','SPCM50A')}: {e}  → simulación.")
                 self._driver = SimuladorSPCM()
                 self._simulacion = True
                 self.sig_conexion.emit(False, self._driver.serial_str)
@@ -973,8 +1093,11 @@ class MainWindow(QMainWindow):
         self.lbl_serial.setText(info)
 
     def _mostrar_puertos(self):
-        msg = "── Dispositivos USB Thorlabs detectados ──\n"
-        cs = candidatos_spcm()
+        msg = "── Diagnóstico libusb ──\n"
+        for linea in _DIAG_LIBUSB:
+            msg += f"  {linea}\n"
+        msg += "\n── Dispositivos USB Thorlabs detectados ──\n"
+        cs, diag = candidatos_spcm()
         if cs:
             for c in cs:
                 msg += (f"\n  [{c['score']}]  VID={hex(c['vid'])} PID={hex(c['pid'])}\n"
@@ -982,10 +1105,14 @@ class MainWindow(QMainWindow):
                         f"     Product:      {c['product']}\n"
                         f"     S/N:          {c['serial_number']}\n")
         else:
-            msg += "\n  (no se detectó ningún dispositivo Thorlabs)"
-        msg += "\n\n── Todos los dispositivos USB del sistema ──\n"
+            msg += "\n  (no se detectó ningún dispositivo Thorlabs)\n"
+            msg += f"\n{diag}\n"
+        msg += "\n── Todos los dispositivos USB del sistema ──\n"
         try:
-            for d in usb.core.find(find_all=True):
+            kw = {"find_all": True}
+            if _USB_BACKEND is not None:
+                kw["backend"] = _USB_BACKEND
+            for d in usb.core.find(**kw):
                 manuf = _leer_string_descriptor(d, d.iManufacturer)
                 prod  = _leer_string_descriptor(d, d.iProduct)
                 if manuf or prod:
@@ -1129,8 +1256,10 @@ class MainWindow(QMainWindow):
     # ─────────────────────────────────────────────────────────────────────────
     def _log(self, msg: str):
         ts = datetime.now().strftime("%H:%M:%S")
-        # Si más adelante quisieras una consola, volcar aquí.
-        print(f"[{ts}] {msg}")
+        line = f"[{ts}] {msg}"
+        print(line)
+        if hasattr(self, "log_widget") and self.log_widget is not None:
+            self.log_widget.appendPlainText(line)
 
     def _on_error(self, msg: str):
         self._log(f"ERROR: {msg}")
