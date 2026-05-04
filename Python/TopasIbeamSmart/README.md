@@ -350,11 +350,25 @@ TopasIbeamSmart/
 
 ## GUI del SPCM50A/M — Uso
 
+Aplicación con apariencia y funcionalidad similares al software original
+**Thorlabs Single Photon Counter GUI**: barra de menú (File / Device /
+Option / Help), barra de herramientas con logo THORLABS, panel izquierdo
+con Operating Mode + Settings + Start + Measurement Properties + Occurrences,
+panel derecho con cuatro pestañas (Alignment / Table / Graph / Bar) y
+status bar con número de serie del dispositivo.
+
+### Instalación de dependencias
+
+```bash
+source venv/bin/activate
+brew install libusb            # solo primera vez (macOS)
+pip install pyusb numpy PyQt6 matplotlib
+```
+
 ### Desde fuente
 
 ```bash
 source venv/bin/activate
-pip install hid          # biblioteca USB HID (solo primera vez)
 python spcm_gui.py
 ```
 
@@ -364,43 +378,114 @@ python spcm_gui.py
 open dist/SPCM50AM.app
 ```
 
-### Funcionalidades
+La app incluye `libusb-1.0.0.dylib` dentro del bundle, por lo que **no
+requiere Homebrew en la máquina destino**.
 
-| Pestaña | Función |
-|---------|---------|
-| **Medición** | Display digital (cps / kcps / Mcps), T integración 1 ms–10 s, modo continuo / única adquisición, umbral de alerta, estadísticas en vivo (μ, σ, SNR, σ/μ), gráfica tasa vs tiempo (60 s) |
-| **Análisis** | Histograma de tasas, traza 10 min, estadísticas globales de sesión, exportación CSV con timestamps |
+### Detección automática
 
-Si el SPCM no está conectado la app arranca automáticamente en **modo simulación**
-(fotocuentas Poisson + deriva lenta realista).
+Al arrancar, la app escanea el bus USB buscando dispositivos Thorlabs
+(VID `0x1313`, PID `0x8098` para el SPCM50A). Si encuentra el dispositivo,
+se conecta inmediatamente y muestra el número de serie en la status bar
+(p. ej. `SPCM50A  S/N: M00296614`).
 
-### Conectar el hardware
+Si no detecta hardware (o si el protocolo USB aún no está implementado),
+arranca en **modo simulación** con fotocuentas Poisson + deriva lenta.
 
-El SPCM50A/M se comunica por USB HID (Thorlabs VID = `0x1313`).
-Para encontrar el PID exacto de tu unidad:
+Para inspeccionar manualmente los dispositivos USB conectados:
+**Device → List ports…**
 
-```bash
-python -c "
-import hid
-for d in hid.enumerate(0x1313, 0):
-    print(hex(d['vendor_id']), hex(d['product_id']), d.get('product_string',''))
-"
-```
+### Pestañas
 
-Actualiza `SPCM_PID` en `spcm_gui.py` con el valor obtenido y luego implementa
-`DriverSPCM.leer_conteos()` según el protocolo HID real (ver docstring).
+| Pestaña | Contenido |
+|---------|-----------|
+| **Alignment** | Display LCD grande con la tasa media de conteo (cps / kcps / Mcps) y traza en tiempo real de los últimos 60 s. Útil para alinear el haz sobre el detector maximizando la cuenta. |
+| **Table** | Tabla con `Bin Number` y `Counts` (limitada a 5000 filas para fluidez). |
+| **Graph** | Línea: `Counts per Bin` vs `Bin Number` — vista por defecto, idéntica al software de Thorlabs. |
+| **Bar** | Barras: si el array tiene más de 200 bins, se agrupan automáticamente. |
+
+### Settings (panel izquierdo)
+
+Idéntico al software original:
+
+| Campo | Default | Significado |
+|-------|---------|-------------|
+| Bin Length [ms] | 1.000 | Duración de cada bin |
+| Time between Bins [ms] | 0.001 | Pausa entre bins consecutivos |
+| Pulse Blind Time [ns] | 0.000 | Dead time configurable |
+| Trigger edge | — | Sólo activo en modos triggered |
+| Array Measurement | ☑ | Adquirir un array completo |
+| Continuously | ☐ | Repetir arrays indefinidamente |
+| Bins per Array | 10 000 | Tamaño del array |
+
+Modos de operación: **Free Running Timed Counter** (default), **Triggered
+Timed Counter**, **Single Photon Counter**.
+
+### Measurement Properties
+
+Bloque de sólo lectura que se actualiza tras cada adquisición:
+`Start of Measurement`, `Duration`, barra de progreso, `Number of Bins`,
+`Max./Average/Min. Photon Count`, `Difference Max/Min`, `USB transfer
+rate (measurements/s)`.
+
+### Occurrences during Measurement
+
+Banderas de estado: `Values lost`, `Overtemperature occured`,
+`Overflow occured`, `Saturation of APD`. Se ponen rojas si el dispositivo
+las dispara durante la medición.
+
+### Exportación
+
+`File → Save data as CSV…` (o el botón de la toolbar) genera un CSV
+con columnas `bin_number, counts`.
+
+### Información USB del dispositivo
+
+Verificada en la unidad `M00296614`:
+
+| Atributo | Valor |
+|----------|-------|
+| Vendor ID  | `0x1313` (Thorlabs) |
+| Product ID | `0x8098` |
+| Interface class | `0xFE` subclass `0x03` (Application Specific) |
+| EP `0x02` OUT | bulk, 64 B (comandos) |
+| EP `0x82` IN  | bulk, 64 B (datos) |
+| EP `0x81` IN  | interrupt, 2 B (estado) |
+
+### Implementar el protocolo binario
+
+`DriverSPCM.conectar()` ya configura la interfaz USB y reserva el
+endpoint. Falta capturar el protocolo binario propietario (los bytes
+exactos que el "Thorlabs Single Photon Counter GUI" envía/recibe).
+
+Pasos sugeridos:
+
+1. En Windows, instalar Wireshark + USBPcap.
+2. Mientras se ejecuta el software de Thorlabs, capturar la sesión.
+3. Identificar las secuencias de comando (setup, start, lectura).
+4. Reemplazar el cuerpo de `DriverSPCM.leer_array()` y
+   `DriverSPCM.leer_estado()` con las llamadas correspondientes a
+   `dev.write(EP_BULK_OUT, ...)` y `dev.read(EP_BULK_IN, ...)`.
+
+Mientras el protocolo no esté implementado, la GUI muestra el dispositivo
+**conectado** en la status bar pero usa el simulador para producir datos
+(la primera adquisición lo indica en el log).
 
 ### Empaquetado como app macOS
 
 ```bash
 source venv/bin/activate
-pip install pyinstaller hid
+pip install pyinstaller pyusb
+brew install libusb
+
+LIBUSB=$(find /opt/homebrew/Cellar/libusb -name "libusb-1.0.0.dylib" | head -1)
+
 pyinstaller --windowed --name "SPCM50AM" --noconfirm --optimize 2 \
   --exclude-module tkinter --exclude-module pydoc --exclude-module test \
   --exclude-module scipy \
   --exclude-module PyQt6.QtQml --exclude-module PyQt6.QtQuick \
   --exclude-module PyQt6.QtOpenGL --exclude-module PyQt6.QtMultimedia \
-  --hidden-import hid \
+  --add-binary "$LIBUSB:." \
+  --hidden-import usb.backend.libusb1 \
   spcm_gui.py
 
 xattr -cr dist/SPCM50AM.app

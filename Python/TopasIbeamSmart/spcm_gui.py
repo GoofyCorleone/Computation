@@ -1,38 +1,54 @@
 """
-Interfaz gráfica (PyQt6) para el contador de fotones Thorlabs SPCM50A/M.
+GUI PyQt6 para el contador de fotones Thorlabs SPCM50A/M.
 
-Pestaña 1 — Medición:
-  Display digital de tasa de conteo (cps / kcps / Mcps), tiempo de
-  integración configurable, modo continuo / única adquisición, umbral
-  de alerta, estadísticas en vivo y gráfica P(t) deslizante (60 s).
+Estética y layout basados en el software original
+"Thorlabs Single Photon Counter GUI":
 
-Pestaña 2 — Análisis:
-  Histograma de tasas de conteo, traza de largo plazo (10 min),
-  estadísticas globales de sesión y exportación CSV.
+  ┌────────────────────────────────────────────────────────────────┐
+  │ File  Device  Option  Help                          THORLABS   │
+  ├────────────────────────────────────────────────────────────────┤
+  │ [iconos]                                                       │
+  ├──────────────────────┬─────────────────────────────────────────┤
+  │ Operating Mode       │ [ Alignment | Table | Graph | Bar ]     │
+  │   ▼                  │                                         │
+  │ Settings             │      Counts per Bin                     │
+  │   Bin Length [ms]    │                                         │
+  │   Time between Bins  │      ╲╱╲ ╱╲╱╲╱╲╱╲╱╲╱╲╱                  │
+  │   Pulse Blind Time   │                                         │
+  │   Trigger edge       │                                         │
+  │   ☑ Array Meas       │                                         │
+  │   Bins per Array     │                                         │
+  │ [▶ Start]            │                                         │
+  │ Measurement Props    │                                         │
+  │ Occurrences          │      Bin Number                         │
+  ├──────────────────────┴─────────────────────────────────────────┤
+  │ Estado conexión                            SPCM50A SN: M0…     │
+  └────────────────────────────────────────────────────────────────┘
 
-Log compartido siempre visible bajo las pestañas.
+Detección automática:
+  El SPCM50A se identifica por VID/PID Thorlabs (0x1313 / 0x8098)
+  vía PyUSB. No aparece como puerto serie — es un dispositivo USB
+  bulk con interface class 0xFE (Application Specific).
 
-Comunicación:
-  - Modo real: USB HID via biblioteca `hid` (pip install hid).
-    El SPCM50A/M se identifica con VID=0x1313 (Thorlabs).
-    Para encontrar el PID exacto ejecutar:
-      python -c "import hid; [print(hex(d['vendor_id']),
-        hex(d['product_id']), d['product_string'])
-        for d in hid.enumerate(0x1313,0)]"
-  - Modo simulación: activo automáticamente si no se detecta el
-    dispositivo. Genera fotocuentas Poisson con deriva lenta y
-    cuentas oscuras realistas.
+Si no se detecta hardware (o el protocolo USB no está implementado)
+arranca en modo simulación: distribución de Poisson realista con
+deriva sinusoidal lenta.
 
-Protocolo HID — PENDIENTE:
-  Ver DriverSPCM.leer_conteos(). Capturar tráfico USB con Wireshark
-  (USBPcap en Windows) para determinar el formato exacto de los
-  mensajes HID.
+Notas SPCM50A/M (verificadas en M00296614):
+  - VID=0x1313 (Thorlabs)  PID=0x8098
+  - Interface class 0xFE subclass 0x03 (Application Specific)
+  - Endpoint OUT 0x02 (bulk, 64 B max packet) — comandos
+  - Endpoint IN  0x82 (bulk, 64 B max packet) — datos
+  - Endpoint IN  0x81 (interrupt, 2 B) — estado/eventos
+  - Si APD, máx ~50 Mcps, dead time ≈ 22 ns, dark counts < 50 cps.
+  - Protocolo binario propietario — IMPLEMENTAR en DriverSPCM.leer_array().
 
-Notas de firmware SPCM50A/M:
-  - Máx. tasa de conteo: ~50 Mcps.
-  - Dead time: ≈ 22 ns.
-  - Cuentas oscuras típicas: < 50 cps (Si APD refrigerado).
-  - Rango espectral: 400 – 1000 nm.
+Requisitos (macOS):
+  brew install libusb
+  pip install pyusb numpy PyQt6 matplotlib
+
+Empaquetado: PyInstaller (`dist/SPCM50AM.app`). El bundle incluye
+libusb-1.0.dylib (–add-binary).
 """
 
 import csv
@@ -45,12 +61,17 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+import usb.core
+import usb.util
+
+from PyQt6.QtCore import Qt, QSize, QTimer, pyqtSignal
+from PyQt6.QtGui import QAction, QFont, QIcon, QPalette, QColor
 from PyQt6.QtWidgets import (
-    QApplication, QButtonGroup, QComboBox, QDoubleSpinBox,
-    QFileDialog, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar,
-    QPushButton, QRadioButton, QSizePolicy, QTabWidget,
+    QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
+    QFormLayout, QFrame, QGridLayout, QGroupBox, QHBoxLayout,
+    QHeaderView, QLabel, QMainWindow, QMessageBox, QProgressBar,
+    QPushButton, QSizePolicy, QSpinBox, QSplitter, QStatusBar,
+    QStyle, QTabWidget, QTableWidget, QTableWidgetItem, QToolBar,
     QVBoxLayout, QWidget,
 )
 
@@ -59,189 +80,368 @@ matplotlib.use("QtAgg")
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-try:
-    import hid as _hid
-    HID_DISPONIBLE = True
-except ImportError:
-    HID_DISPONIBLE = False
 
-# ── Identificadores USB Thorlabs ─────────────────────────────────────────────
-THORLABS_VID = 0x1313
-SPCM_PID     = 0x804A   # actualizar tras ejecutar el snippet del docstring
+# ── Constantes ───────────────────────────────────────────────────────────────
+APP_NAME = "Thorlabs Single Photon Counter — SPCM50A/M"
 
-# ── Tiempos de integración disponibles ──────────────────────────────────────
-TIEMPOS_INTEG_MS = [1, 2, 5, 10, 20, 50, 100, 200, 500,
-                    1000, 2000, 5000, 10000]
-INTEG_DEFAULT_MS = 100
+MODOS_OPERACION = [
+    "Free Running Timed Counter",
+    "Triggered Timed Counter",
+    "Single Photon Counter",
+]
+TRIGGER_EDGES = ["—", "Rising", "Falling"]
 
-# ── Ventanas de gráficas ─────────────────────────────────────────────────────
-VENTANA_PLOT_S  = 60.0    # Tab 1: ventana deslizante (s)
-VENTANA_LARGO_S = 600.0   # Tab 2: traza de largo plazo (10 min)
+# Defaults idénticos al software de Thorlabs
+DEFAULTS = {
+    "bin_length_ms":      1.000,
+    "time_between_ms":    0.001,
+    "pulse_blind_ns":     0.000,
+    "bins_per_array":     10000,
+    "array_measurement":  True,
+    "continuously":       False,
+    "modo":               MODOS_OPERACION[0],
+    "trigger_edge":       TRIGGER_EDGES[0],
+}
 
-# ── Paleta dark (Catppuccin Mocha) ───────────────────────────────────────────
-BG       = "#1e1e2e"
-AX_BG    = "#181825"
-FG       = "#cdd6f4"
-GRID_COL = "#45475a"
-C_MAIN   = "#89b4fa"   # azul   — curva principal
-C_HIST   = "#cba6f7"   # lila   — histograma
-C_ALERT  = "#f38ba8"   # rosa   — umbral / alerta
-C_STAT   = "#a6e3a1"   # verde  — estadísticas
-C_SET    = "#6c7086"   # gris   — referencias
+# USB Thorlabs SPCM50A
+THORLABS_VID    = 0x1313
+SPCM50A_PID     = 0x8098
+EP_BULK_OUT     = 0x02      # comandos al dispositivo
+EP_BULK_IN      = 0x82      # respuesta del dispositivo
+EP_INT_IN       = 0x81      # estado / eventos
+TIMEOUT_USB_MS  = 2000
 
-# Estilo del display digital (LCD style)
-_DISPLAY_BASE = (
-    "background-color:#0d0d1a;"
-    "color:#89b4fa;"
-    "font-family:'Courier New',monospace;"
-    "font-size:42px;"
+# Paleta clara (estética Thorlabs)
+COL_PANEL  = "#ececec"
+COL_PLOT   = "#fafafa"
+COL_GRID   = "#cfd6dd"
+COL_LINEA  = "#1f1f1f"
+COL_AZUL   = "#3a73c4"
+COL_VERDE  = "#3a8c3a"
+COL_ROJO   = "#c4392f"
+COL_TXT    = "#1a1a1a"
+COL_BORDE  = "#b0b0b0"
+
+# Estilo del título "THORLABS"
+ESTILO_LOGO = (
+    "color:#c4392f;"
+    "font-family:'Helvetica',sans-serif;"
+    "font-size:18px;"
     "font-weight:bold;"
-    "border:2px solid #45475a;"
-    "border-radius:6px;"
-    "padding:10px 24px;"
-    "letter-spacing:4px;"
-)
-_DISPLAY_ALERTA = (
-    "background-color:#0d0d1a;"
-    "color:#f38ba8;"
-    "font-family:'Courier New',monospace;"
-    "font-size:42px;"
-    "font-weight:bold;"
-    "border:2px solid #f38ba8;"
-    "border-radius:6px;"
-    "padding:10px 24px;"
-    "letter-spacing:4px;"
+    "letter-spacing:2px;"
+    "padding-right:12px;"
 )
 
+# Hoja de estilo global
+STYLE_GLOBAL = """
+QMainWindow, QWidget {
+    background-color: #ececec;
+    color: #1a1a1a;
+    font-size: 11px;
+}
+QGroupBox {
+    background-color: #f5f5f5;
+    border: 1px solid #b0b0b0;
+    border-radius: 3px;
+    margin-top: 12px;
+    padding: 6px 4px 4px 4px;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 0 6px;
+    background-color: #ececec;
+    color: #1a1a1a;
+}
+QLabel { background-color: transparent; }
+QPushButton {
+    background-color: #f8f8f8;
+    border: 1px solid #909090;
+    border-radius: 2px;
+    padding: 4px 10px;
+}
+QPushButton:hover { background-color: #e8e8e8; }
+QPushButton:disabled { color: #888; }
+QSpinBox, QDoubleSpinBox, QComboBox, QLineEdit {
+    background-color: white;
+    border: 1px solid #b0b0b0;
+    padding: 1px 2px;
+}
+QTabWidget::pane {
+    border: 1px solid #b0b0b0;
+    background: white;
+}
+QTabBar::tab {
+    background: #e0e0e0;
+    border: 1px solid #b0b0b0;
+    padding: 5px 16px;
+}
+QTabBar::tab:selected {
+    background: white;
+    border-bottom: 1px solid white;
+}
+QTableWidget {
+    background-color: white;
+    gridline-color: #d0d0d0;
+}
+QHeaderView::section {
+    background-color: #e0e0e0;
+    border: 1px solid #b0b0b0;
+    padding: 3px;
+    font-weight: bold;
+}
+QStatusBar { background-color: #d8d8d8; border-top: 1px solid #b0b0b0; }
+QToolBar { background-color: #ececec; border: none; spacing: 2px; }
+QProgressBar {
+    border: 1px solid #b0b0b0;
+    background-color: white;
+    text-align: center;
+    height: 14px;
+}
+QProgressBar::chunk { background-color: #3a73c4; }
+"""
+
 
 # ────────────────────────────────────────────────────────────────────────────
-# Simulador (modo demo)
+# Detección y driver USB (PyUSB)
 # ────────────────────────────────────────────────────────────────────────────
-class SimuladorSPCM:
+def _leer_string_descriptor(dev, idx) -> str:
+    if not idx:
+        return ""
+    try:
+        return usb.util.get_string(dev, idx)
+    except Exception:
+        return ""
+
+
+def candidatos_spcm() -> list[dict]:
     """
-    Genera fotocuentas sintéticas: distribución de Poisson sobre una
-    tasa base con deriva sinusoidal lenta y cuentas oscuras.
+    Devuelve los dispositivos USB compatibles con el Thorlabs SPCM50A/M.
+    Cada elemento: {dev, vid, pid, manufacturer, product, serial_number, score}.
     """
-    def __init__(self):
-        self._activo   = False
-        self._t_inicio: float | None = None
-        self.tasa_base_cps   = 48_500.0
-        self.cuentas_oscuras = 28
-        self._rng = np.random.default_rng()
-
-    def iniciar(self):
-        self._activo   = True
-        self._t_inicio = time.time()
-
-    def detener(self):
-        self._activo = False
-
-    def leer_conteos(self, integ_ms: int) -> int:
-        if not self._activo:
-            return 0
-        t = time.time() - (self._t_inicio or time.time())
-        # Deriva lenta ~10 % con período 60 s + ruido rápido ~1 %
-        deriva = 1.0 + 0.10 * math.sin(2 * math.pi * t / 60.0)
-        tasa   = self.tasa_base_cps * deriva + self.cuentas_oscuras
-        return int(self._rng.poisson(tasa * integ_ms / 1000.0))
-
-    @property
-    def info_dispositivo(self) -> str:
-        return "SIMULACIÓN — Thorlabs SPCM50A/M (demo, sin hardware)"
+    candidatos = []
+    try:
+        for d in usb.core.find(find_all=True, idVendor=THORLABS_VID):
+            manuf = _leer_string_descriptor(d, d.iManufacturer)
+            prod  = _leer_string_descriptor(d, d.iProduct)
+            sn    = _leer_string_descriptor(d, d.iSerialNumber)
+            score = 100 if d.idProduct == SPCM50A_PID else 50
+            if "spcm" in (prod or "").lower():
+                score += 50
+            candidatos.append({
+                "dev":          d,
+                "vid":          d.idVendor,
+                "pid":          d.idProduct,
+                "manufacturer": manuf,
+                "product":      prod,
+                "serial_number": sn,
+                "score":        score,
+            })
+    except Exception:
+        pass
+    candidatos.sort(key=lambda d: d["score"], reverse=True)
+    return candidatos
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# Driver real (USB HID)
-# ────────────────────────────────────────────────────────────────────────────
+def detectar_spcm() -> dict | None:
+    cs = candidatos_spcm()
+    if cs and cs[0]["score"] >= 100:
+        return cs[0]
+    return None
+
+
 class DriverSPCM:
     """
-    Driver USB HID para Thorlabs SPCM50A/M.
+    Driver USB para Thorlabs SPCM50A/M (VID 0x1313, PID 0x8098).
 
-    PROTOCOLO PENDIENTE DE IMPLEMENTACIÓN.
-    Pasos:
-      1. Conectar el SPCM al Mac.
-      2. Ejecutar el snippet del docstring principal para hallar el PID.
-      3. Actualizar SPCM_PID en este archivo.
-      4. Capturar tráfico HID con Wireshark / USBPcap para determinar
-         el formato real del mensaje de solicitud y respuesta.
-      5. Implementar leer_conteos() con el protocolo observado.
+    Endpoints (verificados en SPCM50A M00296614):
+      - 0x02 OUT bulk (64 B)  — comandos
+      - 0x82 IN  bulk (64 B)  — datos
+      - 0x81 IN  interrupt (2 B) — estado
+
+    PROTOCOLO PROPIETARIO — pendiente de captura/documentación.
+    `leer_array()` lanza NotImplementedError; la GUI cae al simulador
+    automáticamente, manteniendo el dispositivo conectado.
+
+    Para implementar el protocolo:
+      1. Capturar tráfico USB con Wireshark + USBPcap (Windows) usando
+         el "Thorlabs Single Photon Counter GUI" como referencia.
+      2. Identificar comandos de setup, start, lectura y estado.
+      3. Reemplazar el cuerpo de leer_array() y leer_estado() abajo.
     """
     def __init__(self):
-        self._dev  = None
-        self._lock = threading.Lock()
+        self._dev:  usb.core.Device | None = None
         self._info: dict = {}
+        self._lock = threading.Lock()
 
-    @staticmethod
-    def enumerar_thorlabs() -> list[dict]:
-        if not HID_DISPONIBLE:
-            return []
-        return list(_hid.enumerate(THORLABS_VID, 0))
-
-    def detectar(self) -> dict | None:
-        for d in self.enumerar_thorlabs():
-            if d.get("product_id") == SPCM_PID:
-                return d
-        return None
-
-    def conectar(self, vid: int = THORLABS_VID, pid: int = SPCM_PID):
-        if not HID_DISPONIBLE:
-            raise RuntimeError("Instalar biblioteca HID: pip install hid")
-        self._dev = _hid.device()
-        self._dev.open(vid, pid)
-        self._dev.set_nonblocking(False)
-        for d in self.enumerar_thorlabs():
-            if d.get("product_id") == pid:
-                self._info = d
-                break
+    def conectar(self, info: dict):
+        dev = info["dev"]
+        # En macOS no hay kernel driver que despegar normalmente, pero
+        # algunos sistemas sí lo requieren.
+        try:
+            if dev.is_kernel_driver_active(0):
+                dev.detach_kernel_driver(0)
+        except (NotImplementedError, usb.core.USBError):
+            pass
+        try:
+            dev.set_configuration()
+        except usb.core.USBError as e:
+            # En macOS a veces falla por permisos: el driver Thorlabs
+            # estándar no está cargado, pero la enumeración funciona.
+            raise RuntimeError(
+                f"No se pudo configurar el dispositivo USB: {e}\n"
+                "En macOS, asegúrate de no tener el software Thorlabs "
+                "Windows abierto vía VM compartiendo el USB.")
+        try:
+            usb.util.claim_interface(dev, 0)
+        except usb.core.USBError as e:
+            raise RuntimeError(f"No se pudo reservar la interface USB: {e}")
+        self._dev  = dev
+        self._info = info
 
     def desconectar(self):
-        if self._dev:
+        if self._dev is not None:
             try:
-                self._dev.close()
+                usb.util.release_interface(self._dev, 0)
             except Exception:
                 pass
-            self._dev = None
+            try:
+                usb.util.dispose_resources(self._dev)
+            except Exception:
+                pass
+        self._dev = None
 
     def conectado(self) -> bool:
         return self._dev is not None
 
-    def leer_conteos(self, integ_ms: int) -> int:
-        """
-        ⚠ IMPLEMENTAR: protocolo HID real del SPCM50A/M.
+    @property
+    def info(self) -> dict:
+        return self._info
 
-        Esquema tentativo (ajustar según captura real):
-          Enviar  → [0x00, 0x01, integ_ms & 0xFF, integ_ms >> 8, 0...0]
-          Esperar → integ_ms ms
-          Recibir ← [status, cnt0, cnt1, cnt2, cnt3, ...]
-          Conteos  = cnt0 | (cnt1<<8) | (cnt2<<16) | (cnt3<<24)
+    @property
+    def serial_str(self) -> str:
+        sn   = self._info.get("serial_number", "?")
+        prod = self._info.get("product", "SPCM50A")
+        return f"{prod}  S/N: {sn}"
+
+    # ── Adquisición ──────────────────────────────────────────────────────────
+    def leer_array(self, bin_length_ms: float, n_bins: int,
+                   time_between_ms: float, pulse_blind_ns: float,
+                   detener_event: threading.Event,
+                   callback_progreso=None) -> np.ndarray:
+        """
+        Adquiere un array de n_bins conteos.
+
+        ⚠ IMPLEMENTAR según protocolo real del SPCM50A. Esquema típico:
+          - Enviar paquete CONFIG (bin_length, n_bins, time_between, blind)
+          - Enviar START
+          - Leer del puerto mientras llegan datos (n_bins * 4 bytes en
+            little-endian, típicamente)
+          - Devolver np.ndarray de int32
         """
         with self._lock:
             raise NotImplementedError(
-                "Protocolo HID no implementado — ver docstring de "
-                "DriverSPCM.leer_conteos(). La app usa simulación."
+                "Protocolo USB no implementado — ver docstring de "
+                "DriverSPCM.leer_array(). Usando simulador."
             )
 
+    def leer_estado(self) -> dict:
+        """
+        Devuelve banderas de estado del hardware.
+        ⚠ IMPLEMENTAR. Por ahora devuelve todas en False.
+        """
+        return {
+            "values_lost":     False,
+            "overtemperature": False,
+            "overflow":        False,
+            "saturation":      False,
+        }
+
+
+class SimuladorSPCM:
+    """Genera arrays sintéticos con Poisson + deriva lenta + dark counts."""
+    def __init__(self):
+        self.tasa_base_cps    = 48_500.0
+        self.cuentas_oscuras  = 28
+        self._rng = np.random.default_rng()
+
     @property
-    def info_dispositivo(self) -> str:
-        sn = self._info.get("serial_number", "?")
-        ps = self._info.get("product_string", "SPCM50A/M")
-        return f"Thorlabs {ps}  S/N: {sn}"
+    def serial_str(self) -> str:
+        return "SPCM50A SIMULADO"
+
+    @property
+    def info(self) -> dict:
+        return {"device": "<simulación>", "serial_number": "SIM-000001"}
+
+    def conectar(self, *_args, **_kw): pass
+    def desconectar(self):              pass
+    def conectado(self) -> bool:        return True
+
+    def leer_array(self, bin_length_ms: float, n_bins: int,
+                   time_between_ms: float, pulse_blind_ns: float,
+                   detener_event: threading.Event,
+                   callback_progreso=None) -> np.ndarray:
+        """
+        Simula la adquisición en tiempo real, emitiendo progreso.
+        Respeta el tiempo total ≈ n_bins * (bin_length + time_between).
+        """
+        counts = np.zeros(n_bins, dtype=np.int64)
+        rate_per_bin = self.tasa_base_cps * (bin_length_ms / 1000.0)
+
+        # Tamaño de chunk para emitir progreso suave (~50 actualizaciones)
+        chunk_n   = max(1, n_bins // 50)
+        per_bin_s = (bin_length_ms + time_between_ms) / 1000.0
+        # Acelerar simulación si bin_length es muy corto pero n_bins grande:
+        # mantenemos siempre ≥ 0.02 s por chunk para visualización
+        chunk_t   = max(0.02, chunk_n * per_bin_s)
+
+        t0 = time.time()
+        for i in range(0, n_bins, chunk_n):
+            if detener_event.is_set():
+                break
+            j = min(i + chunk_n, n_bins)
+            # Deriva sinusoidal lenta + dark counts
+            idx = np.arange(i, j)
+            t   = idx * per_bin_s + (time.time() - t0)
+            envolvente = 1.0 + 0.10 * np.sin(2 * np.pi * t / 30.0)
+            r = rate_per_bin * envolvente + self.cuentas_oscuras * (bin_length_ms / 1000.0)
+            counts[i:j] = self._rng.poisson(r)
+
+            # Esperar el "tiempo" que tardaría en hardware
+            time.sleep(chunk_t)
+            if callback_progreso:
+                callback_progreso(j / n_bins)
+
+        return counts
+
+    def leer_estado(self) -> dict:
+        return {
+            "values_lost":     False,
+            "overtemperature": False,
+            "overflow":        False,
+            "saturation":      False,
+        }
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# Helper figuras dark
+# Helpers gráficos
 # ────────────────────────────────────────────────────────────────────────────
-def _make_fig(w: float = 4.5, h: float = 3.0):
-    fig = Figure(figsize=(w, h), tight_layout=True, facecolor=BG)
-    ax  = fig.add_subplot(111, facecolor=AX_BG)
+def _make_fig(w: float = 5.0, h: float = 3.5):
+    fig = Figure(figsize=(w, h), tight_layout=True, facecolor="white")
+    ax  = fig.add_subplot(111, facecolor=COL_PLOT)
     for sp in ax.spines.values():
-        sp.set_color(GRID_COL)
-    ax.tick_params(colors=FG, labelsize=8)
-    ax.xaxis.label.set_color(FG)
-    ax.yaxis.label.set_color(FG)
-    ax.title.set_color(FG)
-    ax.grid(True, color=GRID_COL, linewidth=0.5, alpha=0.6)
+        sp.set_color(COL_BORDE)
+    ax.tick_params(colors=COL_TXT, labelsize=9)
+    ax.xaxis.label.set_color(COL_TXT)
+    ax.yaxis.label.set_color(COL_TXT)
+    ax.title.set_color(COL_TXT)
+    ax.grid(True, color=COL_GRID, linewidth=0.6, alpha=0.9)
     return fig, ax
+
+
+def _icon(style: QStyle, sp: QStyle.StandardPixmap) -> QIcon:
+    return style.standardIcon(sp)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -249,293 +449,336 @@ def _make_fig(w: float = 4.5, h: float = 3.0):
 # ────────────────────────────────────────────────────────────────────────────
 class MainWindow(QMainWindow):
 
-    # Señales cross-thread
-    sig_log      = pyqtSignal(str)
-    sig_conteos  = pyqtSignal(int, float)   # (N_raw, t_s)
-    sig_error    = pyqtSignal(str)
-    sig_conexion = pyqtSignal(str)
+    sig_log         = pyqtSignal(str)
+    sig_progreso    = pyqtSignal(float)               # 0..1
+    sig_array_listo = pyqtSignal(object, object)      # (np.ndarray, dict)
+    sig_error       = pyqtSignal(str)
+    sig_conexion    = pyqtSignal(bool, str)           # (conectado, info)
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Thorlabs SPCM50A/M — Single Photon Counter")
-        self.setMinimumSize(1020, 920)
-        self.resize(1060, 980)
+        self.setWindowTitle(APP_NAME)
+        self.setMinimumSize(1180, 760)
+        self.resize(1280, 820)
 
         # Driver
-        self._driver: SimuladorSPCM | DriverSPCM = SimuladorSPCM()
+        self._driver: DriverSPCM | SimuladorSPCM = SimuladorSPCM()
         self._simulacion = True
 
         # Estado de medición
-        self._midiendo         = False
-        self._modo_unico       = False
-        self._seguir_midiendo  = threading.Event()
-        self._hilo_med:  threading.Thread | None = None
-        self._integ_ms   = INTEG_DEFAULT_MS
-        self._umbral_cps: float | None = None
-        self._t0:         float | None = None
+        self._midiendo: bool = False
+        self._continuamente: bool = False
+        self._evt_detener  = threading.Event()
+        self._hilo_med: threading.Thread | None = None
+        self._t_inicio_med: float | None = None
+        self._datos_actuales: np.ndarray | None = None
 
-        # Historial
-        self._hist_tasa:  deque[tuple[float, float]] = deque()  # (t_s, cps)
-        self._hist_largo: deque[tuple[float, float]] = deque()  # (t_s, cps)
-        self._hist_bins:  list[float] = []
-        self._timestamps: list[str]   = []
-
-        # Acumuladores
-        self._total_conteos = 0
-        self._mediciones_n  = 0
-        self._ventana_stats: deque[float] = deque(maxlen=200)
+        # Historial para alignment
+        self._hist_align: deque[tuple[float, float]] = deque(maxlen=600)
 
         self._construir_ui()
         self._conectar_senales()
 
-        QTimer.singleShot(200, self._auto_detectar)
+        # Auto-detectar al arrancar
+        QTimer.singleShot(150, self._auto_detectar)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Construcción UI
     # ─────────────────────────────────────────────────────────────────────────
     def _construir_ui(self):
-        raiz = QWidget()
-        self.setCentralWidget(raiz)
-        lay  = QVBoxLayout(raiz)
-        lay.setSpacing(6)
+        # Menú superior
+        self._construir_menu()
+        # Toolbar
+        self._construir_toolbar()
+        # Central: splitter con panel izquierdo + tabs derecha
+        central = QWidget()
+        self.setCentralWidget(central)
+        lay = QVBoxLayout(central); lay.setContentsMargins(4, 4, 4, 4)
 
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(4)
+
+        izq = self._construir_panel_izquierdo()
+        der = self._construir_panel_derecho()
+
+        splitter.addWidget(izq)
+        splitter.addWidget(der)
+        splitter.setSizes([300, 980])
+        splitter.setCollapsible(0, False)
+        splitter.setCollapsible(1, False)
+        lay.addWidget(splitter)
+
+        # Status bar
+        self._construir_status_bar()
+
+    def _construir_menu(self):
+        mb = self.menuBar()
+
+        m_file   = mb.addMenu("&File")
+        a_save   = QAction("Save data as CSV…", self)
+        a_save.triggered.connect(self._guardar_csv)
+        a_quit   = QAction("Exit", self); a_quit.triggered.connect(self.close)
+        m_file.addAction(a_save); m_file.addSeparator(); m_file.addAction(a_quit)
+
+        m_dev    = mb.addMenu("&Device")
+        self.a_conectar    = QAction("Connect", self)
+        self.a_conectar.triggered.connect(self._toggle_conexion)
+        a_refrescar  = QAction("Refresh / Auto-detect", self)
+        a_refrescar.triggered.connect(self._auto_detectar)
+        a_listar     = QAction("List ports…", self)
+        a_listar.triggered.connect(self._mostrar_puertos)
+        m_dev.addAction(self.a_conectar)
+        m_dev.addAction(a_refrescar)
+        m_dev.addSeparator()
+        m_dev.addAction(a_listar)
+
+        m_opt    = mb.addMenu("&Option")
+        a_reset  = QAction("Reset values", self)
+        a_reset.triggered.connect(self._reset_settings)
+        m_opt.addAction(a_reset)
+
+        m_help   = mb.addMenu("&Help")
+        a_about  = QAction("About", self)
+        a_about.triggered.connect(self._acerca_de)
+        m_help.addAction(a_about)
+
+    def _construir_toolbar(self):
+        tb = QToolBar("Toolbar")
+        tb.setIconSize(QSize(20, 20))
+        tb.setMovable(False)
+        self.addToolBar(tb)
+        st = self.style()
+
+        a = QAction(_icon(st, QStyle.StandardPixmap.SP_DialogSaveButton),
+                    "Save CSV", self); a.triggered.connect(self._guardar_csv)
+        tb.addAction(a)
+        a = QAction(_icon(st, QStyle.StandardPixmap.SP_BrowserReload),
+                    "Refresh", self); a.triggered.connect(self._auto_detectar)
+        tb.addAction(a)
+        tb.addSeparator()
+        a = QAction(_icon(st, QStyle.StandardPixmap.SP_MediaPlay),
+                    "Start", self); a.triggered.connect(self._iniciar_medicion)
+        tb.addAction(a); self._tb_start = a
+        a = QAction(_icon(st, QStyle.StandardPixmap.SP_MediaStop),
+                    "Stop", self); a.triggered.connect(self._detener_medicion)
+        tb.addAction(a); self._tb_stop = a
+        self._tb_stop.setEnabled(False)
+        tb.addSeparator()
+        a = QAction(_icon(st, QStyle.StandardPixmap.SP_DialogHelpButton),
+                    "About", self); a.triggered.connect(self._acerca_de)
+        tb.addAction(a)
+
+        # Logo THORLABS a la derecha
+        spacer = QWidget(); spacer.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        tb.addWidget(spacer)
+        logo = QLabel("THORLABS")
+        logo.setStyleSheet(ESTILO_LOGO)
+        tb.addWidget(logo)
+
+    def _construir_panel_izquierdo(self) -> QWidget:
+        w = QWidget()
+        w.setMaximumWidth(310); w.setMinimumWidth(280)
+        lay = QVBoxLayout(w); lay.setSpacing(6); lay.setContentsMargins(2, 2, 2, 2)
+
+        # ── Operating Mode ──
+        gb_mode = QGroupBox("Operating Mode")
+        lm = QVBoxLayout(gb_mode)
+        self.cmb_mode = QComboBox()
+        for m in MODOS_OPERACION:
+            self.cmb_mode.addItem(m)
+        self.cmb_mode.setCurrentText(DEFAULTS["modo"])
+        lm.addWidget(self.cmb_mode)
+        lay.addWidget(gb_mode)
+
+        # ── Settings ──
+        gb_set = QGroupBox("Settings")
+        gs = QFormLayout(gb_set); gs.setSpacing(4); gs.setContentsMargins(4, 4, 4, 4)
+        self.spn_bin_len = QDoubleSpinBox()
+        self.spn_bin_len.setRange(0.001, 60_000.0); self.spn_bin_len.setDecimals(3)
+        self.spn_bin_len.setValue(DEFAULTS["bin_length_ms"])
+        self.spn_time_between = QDoubleSpinBox()
+        self.spn_time_between.setRange(0.000, 60_000.0); self.spn_time_between.setDecimals(3)
+        self.spn_time_between.setValue(DEFAULTS["time_between_ms"])
+        self.spn_pulse_blind = QDoubleSpinBox()
+        self.spn_pulse_blind.setRange(0.000, 1000.0); self.spn_pulse_blind.setDecimals(3)
+        self.spn_pulse_blind.setValue(DEFAULTS["pulse_blind_ns"])
+        self.cmb_trigger = QComboBox()
+        for e in TRIGGER_EDGES: self.cmb_trigger.addItem(e)
+        self.cmb_trigger.setEnabled(False)  # sólo para modo triggered
+
+        gs.addRow("Bin Length [ms]",        self.spn_bin_len)
+        gs.addRow("Time between Bins [ms]", self.spn_time_between)
+        gs.addRow("Pulse Blind Time [ns]",  self.spn_pulse_blind)
+        gs.addRow("Trigger edge",            self.cmb_trigger)
+
+        # Checkboxes
+        fila_cb = QHBoxLayout()
+        self.chk_array = QCheckBox("Array Measurement")
+        self.chk_array.setChecked(DEFAULTS["array_measurement"])
+        self.chk_cont = QCheckBox("Continuously")
+        self.chk_cont.setChecked(DEFAULTS["continuously"])
+        fila_cb.addWidget(self.chk_array); fila_cb.addWidget(self.chk_cont)
+        gs.addRow(fila_cb)
+
+        self.spn_bins = QSpinBox()
+        self.spn_bins.setRange(1, 10_000_000)
+        self.spn_bins.setValue(DEFAULTS["bins_per_array"])
+        self.spn_bins.setGroupSeparatorShown(True)
+        gs.addRow("Bins per Array", self.spn_bins)
+
+        self.cmb_mode.currentTextChanged.connect(self._actualizar_modo)
+        lay.addWidget(gb_set)
+
+        # ── Botón Start (grande) ──
+        self.btn_start = QPushButton("▶  Start")
+        self.btn_start.setStyleSheet(
+            "background-color:#3a8c3a;color:white;font-weight:bold;"
+            "font-size:13px;padding:8px;")
+        self.btn_start.clicked.connect(self._iniciar_medicion)
+        lay.addWidget(self.btn_start)
+
+        # ── Measurement Properties ──
+        gb_mp = QGroupBox("Measurement Properties")
+        gm = QFormLayout(gb_mp); gm.setSpacing(2); gm.setContentsMargins(4, 4, 4, 4)
+        self.lbl_t_inicio   = QLabel("—")
+        self.lbl_duracion   = QLabel("—")
+        self.bar_progreso   = QProgressBar()
+        self.bar_progreso.setRange(0, 100); self.bar_progreso.setValue(0)
+        self.lbl_n_bins     = QLabel("0")
+        self.lbl_max_count  = QLabel("0")
+        self.lbl_avg_count  = QLabel("0")
+        self.lbl_min_count  = QLabel("0")
+        self.lbl_diff_count = QLabel("0")
+        self.lbl_usb_rate   = QLabel("0")
+        # Hacerlos read-only y con fuente monoespaciada
+        for lbl in (self.lbl_t_inicio, self.lbl_duracion,
+                    self.lbl_n_bins, self.lbl_max_count, self.lbl_avg_count,
+                    self.lbl_min_count, self.lbl_diff_count, self.lbl_usb_rate):
+            lbl.setStyleSheet(
+                "background:white;border:1px solid #b0b0b0;padding:1px 4px;"
+                "font-family:Menlo,Consolas,monospace;")
+            lbl.setMinimumWidth(80)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        gm.addRow("Start of Measurement",                 self.lbl_t_inicio)
+        gm.addRow("Duration of Array Measurement",        self.lbl_duracion)
+        gm.addRow("Progress of Array Measurement",        self.bar_progreso)
+        gm.addRow("Number of Bins",                        self.lbl_n_bins)
+        gm.addRow("Max. Photon Count",                     self.lbl_max_count)
+        gm.addRow("Average Photon Count",                  self.lbl_avg_count)
+        gm.addRow("Min. Photon Count",                     self.lbl_min_count)
+        gm.addRow("Difference Max / Min",                  self.lbl_diff_count)
+        gm.addRow("USB transfer rate (measurements / s)", self.lbl_usb_rate)
+        lay.addWidget(gb_mp)
+
+        # ── Occurrences during Measurement ──
+        gb_occ = QGroupBox("Occurrences during Measurement")
+        go = QFormLayout(gb_occ); go.setSpacing(2); go.setContentsMargins(4, 4, 4, 4)
+        self.lbl_lost = QLabel("no")
+        self.lbl_over = QLabel("no")
+        self.lbl_oflw = QLabel("no")
+        self.lbl_sat  = QLabel("no")
+        for lbl in (self.lbl_lost, self.lbl_over, self.lbl_oflw, self.lbl_sat):
+            lbl.setStyleSheet(
+                "background:white;border:1px solid #b0b0b0;padding:1px 6px;"
+                "font-family:Menlo,Consolas,monospace;")
+            lbl.setMinimumWidth(40)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        go.addRow("Values lost",            self.lbl_lost)
+        go.addRow("Overtemperature occured", self.lbl_over)
+        go.addRow("Overflow occured",        self.lbl_oflw)
+        go.addRow("Saturation of APD",       self.lbl_sat)
+        lay.addWidget(gb_occ)
+
+        lay.addStretch(1)
+        return w
+
+    def _construir_panel_derecho(self) -> QWidget:
         self.tabs = QTabWidget()
-        self.tabs.setStyleSheet(
-            "QTabBar::tab { padding: 8px 22px; font-size: 13px; font-weight: bold; }"
-            "QTabBar::tab:selected { color: #89b4fa; border-bottom: 2px solid #89b4fa; }"
-        )
-        lay.addWidget(self.tabs, 1)
+        self.tabs.addTab(self._construir_tab_alignment(), "Alignment")
+        self.tabs.addTab(self._construir_tab_table(),     "Table")
+        self.tabs.addTab(self._construir_tab_graph(),     "Graph")
+        self.tabs.addTab(self._construir_tab_bar(),       "Bar")
+        self.tabs.setCurrentIndex(2)  # Graph por defecto, como Thorlabs
+        return self.tabs
 
-        tab1 = QWidget(); self.tabs.addTab(tab1, "  Medición  ")
-        tab2 = QWidget(); self.tabs.addTab(tab2, "  Análisis  ")
-        self._construir_tab_medicion(tab1)
-        self._construir_tab_analisis(tab2)
+    def _construir_tab_alignment(self) -> QWidget:
+        w = QWidget(); lay = QVBoxLayout(w); lay.setSpacing(6)
+        gb = QGroupBox("Real-time count rate (alignment)")
+        gl = QVBoxLayout(gb)
+        self.lbl_alignment = QLabel("0  cps")
+        self.lbl_alignment.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_alignment.setStyleSheet(
+            "background:#0d0d1a;color:#3a8c3a;"
+            "font-family:'Courier New',monospace;font-size:64px;"
+            "font-weight:bold;border:2px solid #b0b0b0;border-radius:4px;"
+            "padding:20px;letter-spacing:6px;")
+        gl.addWidget(self.lbl_alignment)
+        lay.addWidget(gb, 1)
 
-        # Log compartido
-        gb_log = QGroupBox("Log")
-        ll = QVBoxLayout(gb_log)
-        self.log = QPlainTextEdit()
-        self.log.setReadOnly(True)
-        self.log.setMaximumBlockCount(1000)
-        self.log.setMaximumHeight(118)
-        self.log.setStyleSheet(
-            "background:#111;color:#0f0;font-family:Menlo;font-size:11px;")
-        ll.addWidget(self.log)
-        lay.addWidget(gb_log)
+        gb2 = QGroupBox("Count rate vs time (last 60 s)")
+        gl2 = QVBoxLayout(gb2)
+        fig_a, self.ax_align = _make_fig(7.5, 2.6)
+        self.ax_align.set_xlabel("t [s]")
+        self.ax_align.set_ylabel("Count rate [cps]")
+        self.canvas_align = FigureCanvas(fig_a)
+        self.line_align,  = self.ax_align.plot([], [], color=COL_AZUL, lw=1.4)
+        gl2.addWidget(self.canvas_align)
+        lay.addWidget(gb2, 2)
+        return w
 
-    # ── Tab 1 — Medición ─────────────────────────────────────────────────────
-    def _construir_tab_medicion(self, parent: QWidget):
-        lay = QVBoxLayout(parent)
-        lay.setSpacing(6)
+    def _construir_tab_table(self) -> QWidget:
+        w = QWidget(); lay = QVBoxLayout(w); lay.setContentsMargins(2, 2, 2, 2)
+        self.tabla = QTableWidget(0, 2)
+        self.tabla.setHorizontalHeaderLabels(["Bin Number", "Counts"])
+        self.tabla.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
+        self.tabla.verticalHeader().setVisible(False)
+        self.tabla.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.tabla.setAlternatingRowColors(True)
+        self.tabla.setStyleSheet(
+            "alternate-background-color:#f5f5f5;background-color:white;")
+        lay.addWidget(self.tabla)
+        return w
 
-        # Fila superior: Dispositivo + Configuración
-        fila_top = QHBoxLayout()
+    def _construir_tab_graph(self) -> QWidget:
+        w = QWidget(); lay = QVBoxLayout(w); lay.setContentsMargins(2, 2, 2, 2)
+        fig_g, self.ax_graph = _make_fig(8.0, 5.5)
+        self.ax_graph.set_xlabel("Bin Number")
+        self.ax_graph.set_ylabel("Counts per Bin")
+        self.canvas_graph = FigureCanvas(fig_g)
+        self.line_graph,  = self.ax_graph.plot([], [], color=COL_LINEA, lw=0.9)
+        lay.addWidget(self.canvas_graph)
+        return w
 
-        # Dispositivo
-        gb_dev = QGroupBox("Dispositivo")
-        gd = QVBoxLayout(gb_dev)
-        self.lbl_dispositivo = QLabel("Buscando …")
-        self.lbl_dispositivo.setStyleSheet("font-size:11px;color:#cba6f7;")
-        self.lbl_dispositivo.setWordWrap(True)
-        gd.addWidget(self.lbl_dispositivo)
-        fila_dev = QHBoxLayout()
-        self.btn_conectar = QPushButton("Conectar")
-        self.btn_conectar.clicked.connect(self._toggle_conexion)
-        self.btn_sim = QPushButton("Modo demo")
-        self.btn_sim.setStyleSheet("color:#cba6f7;")
-        self.btn_sim.clicked.connect(self._activar_simulacion_manual)
-        fila_dev.addWidget(self.btn_conectar)
-        fila_dev.addWidget(self.btn_sim)
-        gd.addLayout(fila_dev)
-        fila_top.addWidget(gb_dev, 2)
+    def _construir_tab_bar(self) -> QWidget:
+        w = QWidget(); lay = QVBoxLayout(w); lay.setContentsMargins(2, 2, 2, 2)
+        fig_b, self.ax_bar = _make_fig(8.0, 5.5)
+        self.ax_bar.set_xlabel("Bin Number")
+        self.ax_bar.set_ylabel("Counts per Bin")
+        self.canvas_bar = FigureCanvas(fig_b)
+        self._bar_artista = None
+        lay.addWidget(self.canvas_bar)
+        return w
 
-        # Configuración
-        gb_cfg = QGroupBox("Configuración")
-        gcf = QGridLayout(gb_cfg)
-
-        gcf.addWidget(QLabel("T integración:"), 0, 0)
-        self.cmb_integ = QComboBox()
-        for t in TIEMPOS_INTEG_MS:
-            lbl = f"{t} ms" if t < 1000 else f"{t//1000} s"
-            self.cmb_integ.addItem(lbl, t)
-        self.cmb_integ.setCurrentIndex(TIEMPOS_INTEG_MS.index(INTEG_DEFAULT_MS))
-        self.cmb_integ.currentIndexChanged.connect(self._cambiar_integracion)
-        gcf.addWidget(self.cmb_integ, 0, 1)
-
-        gcf.addWidget(QLabel("Umbral alerta:"), 1, 0)
-        fila_u = QHBoxLayout()
-        self.spn_umbral = QDoubleSpinBox()
-        self.spn_umbral.setRange(0, 1e8)
-        self.spn_umbral.setDecimals(0)
-        self.spn_umbral.setSuffix(" cps")
-        self.spn_umbral.setValue(0)
-        self.spn_umbral.setSpecialValueText("— sin umbral")
-        fila_u.addWidget(self.spn_umbral)
-        btn_u = QPushButton("Aplicar")
-        btn_u.clicked.connect(self._aplicar_umbral)
-        fila_u.addWidget(btn_u)
-        gcf.addLayout(fila_u, 1, 1)
-
-        gcf.addWidget(QLabel("Modo:"), 2, 0)
-        fila_modo = QHBoxLayout()
-        self.rb_continuo = QRadioButton("Continuo")
-        self.rb_unico    = QRadioButton("Única adquisición")
-        self.rb_continuo.setChecked(True)
-        bg = QButtonGroup(self)
-        bg.addButton(self.rb_continuo)
-        bg.addButton(self.rb_unico)
-        fila_modo.addWidget(self.rb_continuo)
-        fila_modo.addWidget(self.rb_unico)
-        gcf.addLayout(fila_modo, 2, 1)
-        fila_top.addWidget(gb_cfg, 3)
-
-        lay.addLayout(fila_top)
-
-        # Display digital grande
-        gb_disp = QGroupBox("Tasa de conteo")
-        ld = QVBoxLayout(gb_disp)
-        self.lbl_tasa = QLabel("0  cps")
-        self.lbl_tasa.setStyleSheet(_DISPLAY_BASE)
-        self.lbl_tasa.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ld.addWidget(self.lbl_tasa)
-
-        fila_info = QHBoxLayout()
-        self.lbl_total   = QLabel("Total: 0 cuentas")
-        self.lbl_elapsed = QLabel("Tiempo: 0.0 s")
-        self.lbl_n_med   = QLabel("N: 0 mediciones")
-        for lbl in (self.lbl_total, self.lbl_elapsed, self.lbl_n_med):
-            lbl.setStyleSheet("font-size:12px;color:#a6adc8;")
-            fila_info.addWidget(lbl)
-        ld.addLayout(fila_info)
-        lay.addWidget(gb_disp)
-
-        # Botones de control
-        gb_ctrl = QGroupBox()
-        lc = QHBoxLayout(gb_ctrl)
-        self.btn_iniciar = QPushButton("▶  Iniciar")
-        self.btn_detener = QPushButton("■  Detener")
-        self.btn_reset   = QPushButton("↺  Reiniciar")
-        self.btn_iniciar.setStyleSheet(
-            "background:#3a7d3a;color:white;font-weight:bold;"
-            "padding:10px 24px;font-size:14px;")
-        self.btn_detener.setStyleSheet(
-            "background:#7d3a3a;color:white;font-weight:bold;"
-            "padding:10px 24px;font-size:14px;")
-        self.btn_reset.setStyleSheet(
-            "background:#45475a;color:white;font-weight:bold;"
-            "padding:10px 24px;font-size:14px;")
-        self.btn_iniciar.clicked.connect(self._iniciar_medicion)
-        self.btn_detener.clicked.connect(self._detener_medicion)
-        self.btn_reset.clicked.connect(self._reiniciar)
-        self.btn_detener.setEnabled(False)
-        for b in (self.btn_iniciar, self.btn_detener, self.btn_reset):
-            lc.addWidget(b)
-        lay.addWidget(gb_ctrl)
-
-        # Estadísticas en vivo
-        gb_est = QGroupBox("Estadísticas en vivo (ventana 200 muestras)")
-        ge = QGridLayout(gb_est)
-        self.lbl_media  = QLabel("Media: —")
-        self.lbl_sigma  = QLabel("σ: —")
-        self.lbl_min    = QLabel("Mín: —")
-        self.lbl_max    = QLabel("Máx: —")
-        self.lbl_snr    = QLabel("SNR: —")
-        self.lbl_sigma_p = QLabel("σ/μ: —")
-        stats_lbls = [self.lbl_media, self.lbl_sigma, self.lbl_min,
-                      self.lbl_max, self.lbl_snr, self.lbl_sigma_p]
-        for i, lbl in enumerate(stats_lbls):
-            lbl.setStyleSheet("font-family:Menlo;font-size:12px;")
-            ge.addWidget(lbl, i // 3, i % 3)
-        lay.addWidget(gb_est)
-
-        # Gráfica tasa vs tiempo (60 s)
-        gb_plot = QGroupBox(f"Tasa de conteo — últimos {int(VENTANA_PLOT_S)} s")
-        lp = QVBoxLayout(gb_plot)
-        fig_m, self.ax_med = _make_fig(9.4, 3.0)
-        self.ax_med.set_xlabel("t [s]")
-        self.ax_med.set_ylabel("Tasa [cps]")
-        self.canvas_med  = FigureCanvas(fig_m)
-        self.line_med,   = self.ax_med.plot([], [], color=C_MAIN, lw=1.2,
-                                            marker=".", ms=3)
-        self.line_umbral = self.ax_med.axhline(
-            0, color=C_ALERT, ls="--", lw=0.9,
-            visible=False, label="Umbral")
-        lp.addWidget(self.canvas_med)
-        lay.addWidget(gb_plot)
-
-    # ── Tab 2 — Análisis ──────────────────────────────────────────────────────
-    def _construir_tab_analisis(self, parent: QWidget):
-        lay = QVBoxLayout(parent)
-        lay.setSpacing(6)
-
-        fila_gr = QHBoxLayout(); fila_gr.setSpacing(8)
-
-        # Traza largo plazo
-        gb_largo = QGroupBox(
-            f"Tasa de conteo — últimos {int(VENTANA_LARGO_S // 60)} min")
-        ll = QVBoxLayout(gb_largo)
-        fig_l, self.ax_largo = _make_fig(4.8, 3.5)
-        self.ax_largo.set_xlabel("t [s]")
-        self.ax_largo.set_ylabel("Tasa [cps]")
-        self.canvas_largo = FigureCanvas(fig_l)
-        self.line_largo,  = self.ax_largo.plot([], [], color=C_MAIN, lw=1.0,
-                                               marker=".", ms=2)
-        ll.addWidget(self.canvas_largo)
-        fila_gr.addWidget(gb_largo, 1)
-
-        # Histograma
-        gb_hist = QGroupBox("Histograma de tasa de conteo")
-        lh = QVBoxLayout(gb_hist)
-        fig_h, self.ax_hist = _make_fig(4.8, 3.5)
-        self.ax_hist.set_xlabel("Tasa [cps]")
-        self.ax_hist.set_ylabel("Frecuencia")
-        self.canvas_hist = FigureCanvas(fig_h)
-        lh.addWidget(self.canvas_hist)
-        fila_gr.addWidget(gb_hist, 1)
-
-        lay.addLayout(fila_gr)
-
-        # Panel inferior: estadísticas globales + exportación
-        fila_bot = QHBoxLayout(); fila_bot.setSpacing(8)
-
-        gb_g = QGroupBox("Estadísticas globales (sesión)")
-        gg = QGridLayout(gb_g)
-        _filas = [("Media:", "media"), ("Mediana:", "mediana"),
-                  ("σ:", "sigma"), ("Mín:", "min"),
-                  ("Máx:", "max"), ("N muestras:", "n")]
-        self._g: dict[str, QLabel] = {}
-        for i, (etiq, key) in enumerate(_filas):
-            gg.addWidget(QLabel(etiq), i // 3, (i % 3) * 2)
-            v = QLabel("—")
-            v.setStyleSheet(
-                "font-family:Menlo;color:#89b4fa;font-weight:bold;")
-            gg.addWidget(v, i // 3, (i % 3) * 2 + 1)
-            self._g[key] = v
-        fila_bot.addWidget(gb_g, 2)
-
-        gb_exp = QGroupBox("Exportar")
-        le = QVBoxLayout(gb_exp)
-        self.btn_csv = QPushButton("Guardar CSV …")
-        self.btn_csv.setStyleSheet(
-            "background:#313244;color:#cdd6f4;padding:8px;font-weight:bold;")
-        self.btn_csv.clicked.connect(self._guardar_csv)
-        self.lbl_export = QLabel("(sin exportar)")
-        self.lbl_export.setStyleSheet("font-size:11px;color:#a6adc8;")
-        le.addWidget(self.btn_csv)
-        le.addWidget(self.lbl_export)
-        btn_limpiar = QPushButton("Limpiar historial")
-        btn_limpiar.clicked.connect(self._reiniciar)
-        le.addWidget(btn_limpiar)
-        fila_bot.addWidget(gb_exp, 1)
-
-        lay.addLayout(fila_bot)
+    def _construir_status_bar(self):
+        sb = QStatusBar(); self.setStatusBar(sb)
+        self.lbl_estado = QLabel("Buscando dispositivo …")
+        self.lbl_estado.setStyleSheet("color:#666;")
+        sb.addWidget(self.lbl_estado, 1)
+        self.lbl_serial = QLabel("")
+        self.lbl_serial.setStyleSheet(
+            "color:#1a1a1a;font-family:Menlo,Consolas,monospace;font-weight:bold;")
+        sb.addPermanentWidget(self.lbl_serial)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Señales
     # ─────────────────────────────────────────────────────────────────────────
     def _conectar_senales(self):
         self.sig_log.connect(self._log)
-        self.sig_conteos.connect(self._on_conteos)
+        self.sig_progreso.connect(self._on_progreso)
+        self.sig_array_listo.connect(self._on_array_listo)
         self.sig_error.connect(self._on_error)
         self.sig_conexion.connect(self._on_conexion)
 
@@ -543,48 +786,40 @@ class MainWindow(QMainWindow):
     # Detección y conexión
     # ─────────────────────────────────────────────────────────────────────────
     def _auto_detectar(self):
-        self._log("Buscando Thorlabs SPCM50A/M (VID=0x1313) …")
-        def _t():
-            drv = DriverSPCM()
-            info = drv.detectar()
-            if info:
-                try:
-                    drv.conectar(info["vendor_id"], info["product_id"])
-                    self._driver     = drv
-                    self._simulacion = False
-                    self.sig_conexion.emit(drv.info_dispositivo)
-                    self.sig_log.emit(f"Conectado: {drv.info_dispositivo}")
-                    return
-                except Exception as e:
-                    self.sig_log.emit(
-                        f"Dispositivo encontrado pero error al conectar: {e}")
-            else:
-                if HID_DISPONIBLE:
-                    lista = DriverSPCM.enumerar_thorlabs()
-                    if lista:
-                        self.sig_log.emit(
-                            "Dispositivos Thorlabs detectados (PID incorrecto):")
-                        for d in lista:
-                            self.sig_log.emit(
-                                f"  VID={hex(d['vendor_id'])} "
-                                f"PID={hex(d['product_id'])} "
-                                f"'{d.get('product_string','')}'")
-                self.sig_log.emit(
-                    "SPCM50A/M no encontrado — activando modo simulación.")
-            self._usar_simulacion()
-        threading.Thread(target=_t, daemon=True).start()
-
-    def _usar_simulacion(self):
-        sim = SimuladorSPCM()
-        self._driver     = sim
-        self._simulacion = True
-        self.sig_conexion.emit(sim.info_dispositivo)
-
-    def _activar_simulacion_manual(self):
         if self._midiendo:
-            self._detener_medicion()
-        self._usar_simulacion()
-        self._log("Modo simulación activado manualmente.")
+            self._log("Detección bloqueada: medición en curso.")
+            return
+        self._log("Auto-detección de SPCM50A …")
+        def _t():
+            info = detectar_spcm()
+            if info is None:
+                self.sig_log.emit(
+                    "Ningún dispositivo Thorlabs detectado — "
+                    "modo simulación activo.")
+                self._driver = SimuladorSPCM()
+                self._simulacion = True
+                self.sig_conexion.emit(False, self._driver.serial_str)
+                return
+            try:
+                drv = DriverSPCM()
+                drv.conectar(info)
+                self._driver = drv
+                self._simulacion = False
+                serial_txt = (f"SPCM50A {info.get('serial_number','?')}  "
+                              f"({info['device']})")
+                self.sig_conexion.emit(True, serial_txt)
+                self.sig_log.emit(
+                    f"Conectado: {info['device']}  "
+                    f"S/N={info.get('serial_number','?')}  "
+                    f"desc='{info.get('description','')}'  "
+                    f"score={info['score']}")
+            except Exception as e:
+                self.sig_log.emit(
+                    f"Error abriendo {info['device']}: {e}  → simulación.")
+                self._driver = SimuladorSPCM()
+                self._simulacion = True
+                self.sig_conexion.emit(False, self._driver.serial_str)
+        threading.Thread(target=_t, daemon=True).start()
 
     def _toggle_conexion(self):
         if isinstance(self._driver, DriverSPCM) and self._driver.conectado():
@@ -592,323 +827,348 @@ class MainWindow(QMainWindow):
                 self._detener_medicion()
             self._driver.desconectar()
             self._log("Desconectado.")
-            self._usar_simulacion()
+            self._driver = SimuladorSPCM()
+            self._simulacion = True
+            self._on_conexion(False, self._driver.serial_str)
         else:
             self._auto_detectar()
 
-    def _on_conexion(self, info: str):
-        self.lbl_dispositivo.setText(info)
-        color = "#cba6f7" if self._simulacion else "#a6e3a1"
-        self.lbl_dispositivo.setStyleSheet(f"font-size:11px;color:{color};")
-        self.btn_conectar.setText(
-            "Desconectar"
-            if (not self._simulacion
-                and isinstance(self._driver, DriverSPCM)
-                and self._driver.conectado())
-            else "Conectar")
+    def _on_conexion(self, conectado: bool, info: str):
+        if conectado:
+            self.lbl_estado.setText("● Conectado")
+            self.lbl_estado.setStyleSheet(
+                "color:#3a8c3a;font-weight:bold;")
+            self.a_conectar.setText("Disconnect")
+        else:
+            if self._simulacion:
+                self.lbl_estado.setText("● Modo simulación (sin hardware)")
+                self.lbl_estado.setStyleSheet(
+                    "color:#a06030;font-weight:bold;")
+            else:
+                self.lbl_estado.setText("○ Desconectado")
+                self.lbl_estado.setStyleSheet("color:#666;")
+            self.a_conectar.setText("Connect")
+        self.lbl_serial.setText(info)
+
+    def _mostrar_puertos(self):
+        msg = "── Dispositivos USB Thorlabs detectados ──\n"
+        cs = candidatos_spcm()
+        if cs:
+            for c in cs:
+                msg += (f"\n  [{c['score']}]  VID={hex(c['vid'])} PID={hex(c['pid'])}\n"
+                        f"     Manufacturer: {c['manufacturer']}\n"
+                        f"     Product:      {c['product']}\n"
+                        f"     S/N:          {c['serial_number']}\n")
+        else:
+            msg += "\n  (no se detectó ningún dispositivo Thorlabs)"
+        msg += "\n\n── Todos los dispositivos USB del sistema ──\n"
+        try:
+            for d in usb.core.find(find_all=True):
+                manuf = _leer_string_descriptor(d, d.iManufacturer)
+                prod  = _leer_string_descriptor(d, d.iProduct)
+                if manuf or prod:
+                    msg += (f"\n  VID={hex(d.idVendor)} PID={hex(d.idProduct)}  "
+                            f"{manuf or ''}  {prod or ''}")
+        except Exception as e:
+            msg += f"\n  (error enumerando: {e})"
+        QMessageBox.information(self, "USB devices", msg)
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Control de medición
+    # Acciones
+    # ─────────────────────────────────────────────────────────────────────────
+    def _actualizar_modo(self, modo: str):
+        # Habilita el dropdown trigger sólo para modo triggered
+        self.cmb_trigger.setEnabled("Trigger" in modo)
+
+    def _reset_settings(self):
+        self.spn_bin_len.setValue(DEFAULTS["bin_length_ms"])
+        self.spn_time_between.setValue(DEFAULTS["time_between_ms"])
+        self.spn_pulse_blind.setValue(DEFAULTS["pulse_blind_ns"])
+        self.spn_bins.setValue(DEFAULTS["bins_per_array"])
+        self.chk_array.setChecked(DEFAULTS["array_measurement"])
+        self.chk_cont.setChecked(DEFAULTS["continuously"])
+        self.cmb_mode.setCurrentText(DEFAULTS["modo"])
+        self.cmb_trigger.setCurrentText(DEFAULTS["trigger_edge"])
+        self._log("Valores por defecto restaurados.")
+
+    def _acerca_de(self):
+        QMessageBox.about(
+            self, "About",
+            "<h3>Thorlabs Single Photon Counter — SPCM50A/M</h3>"
+            "<p>Interfaz alternativa de control basada en PyQt6.</p>"
+            "<p>Detección automática del dispositivo por puerto serie "
+            "(FTDI con prefijo de S/N 'M').</p>"
+            "<p>Modo simulación realista cuando no hay hardware.</p>"
+            "<p style='color:#888;font-size:10px;'>App basada en el "
+            "diseño visual del Thorlabs Single Photon Counter GUI.</p>")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Inicio / parada de medición
     # ─────────────────────────────────────────────────────────────────────────
     def _iniciar_medicion(self):
         if self._midiendo:
             return
-        self._modo_unico = self.rb_unico.isChecked()
-        self._midiendo   = True
-        self._seguir_midiendo.set()
-        self.btn_iniciar.setEnabled(False)
-        self.btn_detener.setEnabled(True)
-        if isinstance(self._driver, SimuladorSPCM):
-            self._driver.iniciar()
-        self._hilo_med = threading.Thread(
-            target=self._bucle_medicion, daemon=True)
+        self._midiendo       = True
+        self._continuamente  = self.chk_cont.isChecked()
+        self._evt_detener.clear()
+        self.btn_start.setEnabled(False)
+        self._tb_start.setEnabled(False)
+        self._tb_stop.setEnabled(True)
+        self.bar_progreso.setValue(0)
+
+        self.lbl_lost.setText("no");  self.lbl_over.setText("no")
+        self.lbl_oflw.setText("no"); self.lbl_sat.setText("no")
+
+        n_bins      = self.spn_bins.value()
+        bin_len     = self.spn_bin_len.value()
+        t_between   = self.spn_time_between.value()
+        pulse_blind = self.spn_pulse_blind.value()
+
+        duracion_s = n_bins * (bin_len + t_between) / 1000.0
+        self.lbl_duracion.setText(f"{duracion_s:.1f} s")
+        self.lbl_t_inicio.setText(datetime.now().strftime("%H:%M:%S"))
+        self._t_inicio_med = time.time()
+
+        self._log(f"Medición iniciada: {n_bins} bins × {bin_len} ms "
+                  f"(continuo={self._continuamente})")
+
+        params = dict(bin_length_ms=bin_len, n_bins=n_bins,
+                      time_between_ms=t_between, pulse_blind_ns=pulse_blind)
+
+        def _t():
+            usar_simulador = isinstance(self._driver, SimuladorSPCM)
+            primer_intento = True
+            while not self._evt_detener.is_set():
+                t0 = time.time()
+                try:
+                    fn = self._driver.leer_array
+                    datos = fn(
+                        bin_length_ms=params["bin_length_ms"],
+                        n_bins=params["n_bins"],
+                        time_between_ms=params["time_between_ms"],
+                        pulse_blind_ns=params["pulse_blind_ns"],
+                        detener_event=self._evt_detener,
+                        callback_progreso=lambda p: self.sig_progreso.emit(p),
+                    )
+                except NotImplementedError:
+                    if primer_intento and not usar_simulador:
+                        self.sig_log.emit(
+                            "[!] Protocolo USB no implementado en DriverSPCM "
+                            "— usando simulador (dispositivo sigue conectado).")
+                    sim = SimuladorSPCM()
+                    datos = sim.leer_array(
+                        bin_length_ms=params["bin_length_ms"],
+                        n_bins=params["n_bins"],
+                        time_between_ms=params["time_between_ms"],
+                        pulse_blind_ns=params["pulse_blind_ns"],
+                        detener_event=self._evt_detener,
+                        callback_progreso=lambda p: self.sig_progreso.emit(p),
+                    )
+                except Exception as e:
+                    self.sig_error.emit(str(e))
+                    break
+                primer_intento = False
+
+                dt = max(time.time() - t0, 1e-3)
+                meta = {
+                    "duracion_s":   dt,
+                    "bin_length_ms": params["bin_length_ms"],
+                    "time_between_ms": params["time_between_ms"],
+                    "n_bins":        params["n_bins"],
+                    "tasa_meas_per_s": params["n_bins"] / dt,
+                    "estado":        self._driver.leer_estado(),
+                }
+                self.sig_array_listo.emit(datos, meta)
+
+                if not self._continuamente:
+                    break
+            self.sig_log.emit("Bucle de medición finalizado.")
+            self._midiendo = False
+
+        self._hilo_med = threading.Thread(target=_t, daemon=True)
         self._hilo_med.start()
-        modo = "única adquisición" if self._modo_unico else "continuo"
-        self._log(f"Medición iniciada — T_int={self._integ_ms} ms  modo={modo}")
 
     def _detener_medicion(self):
-        self._seguir_midiendo.clear()
+        self._evt_detener.set()
         self._midiendo = False
-        if isinstance(self._driver, SimuladorSPCM):
-            self._driver.detener()
-        self.btn_iniciar.setEnabled(True)
-        self.btn_detener.setEnabled(False)
-        self._log("Medición detenida.")
-
-    def _reiniciar(self):
-        estaba_midiendo = self._midiendo
-        if estaba_midiendo:
-            self._detener_medicion()
-        self._t0            = None
-        self._total_conteos = 0
-        self._mediciones_n  = 0
-        self._hist_tasa.clear()
-        self._hist_largo.clear()
-        self._hist_bins.clear()
-        self._timestamps.clear()
-        self._ventana_stats.clear()
-        self.lbl_tasa.setText("0  cps")
-        self.lbl_tasa.setStyleSheet(_DISPLAY_BASE)
-        self.lbl_total.setText("Total: 0 cuentas")
-        self.lbl_elapsed.setText("Tiempo: 0.0 s")
-        self.lbl_n_med.setText("N: 0 mediciones")
-        for lbl in (self.lbl_media, self.lbl_sigma, self.lbl_min,
-                    self.lbl_max, self.lbl_snr, self.lbl_sigma_p):
-            lbl.setText(lbl.text().split(":")[0] + ": —")
-        for v in self._g.values():
-            v.setText("—")
-        self._limpiar_graficas()
-        self._log("Reiniciado.")
-        if estaba_midiendo:
-            self._iniciar_medicion()
-
-    def _cambiar_integracion(self, idx: int):
-        self._integ_ms = self.cmb_integ.itemData(idx)
-        self._log(f"T integración → {self._integ_ms} ms")
-
-    def _aplicar_umbral(self):
-        v = self.spn_umbral.value()
-        if v <= 0:
-            self._umbral_cps = None
-            self.line_umbral.set_visible(False)
-            self._log("Umbral desactivado.")
-        else:
-            self._umbral_cps = v
-            self.line_umbral.set_ydata([v, v])
-            self.line_umbral.set_visible(True)
-            self._log(f"Umbral → {v:,.0f} cps")
-        self.canvas_med.draw_idle()
+        self.btn_start.setEnabled(True)
+        self._tb_start.setEnabled(True)
+        self._tb_stop.setEnabled(False)
+        self._log("Medición detenida por usuario.")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Bucle de medición (hilo)
-    # ─────────────────────────────────────────────────────────────────────────
-    def _bucle_medicion(self):
-        unico = self._modo_unico
-        while self._seguir_midiendo.is_set():
-            t_ini = time.time()
-            try:
-                conteos = self._driver.leer_conteos(self._integ_ms)
-            except NotImplementedError:
-                self.sig_error.emit(
-                    "Protocolo USB no implementado — activando simulación.")
-                self._usar_simulacion()
-                if isinstance(self._driver, SimuladorSPCM):
-                    self._driver.iniciar()
-                conteos = self._driver.leer_conteos(self._integ_ms)
-            except Exception as e:
-                self.sig_error.emit(str(e))
-                break
-            ahora = time.time()
-            if self._t0 is None:
-                self._t0 = ahora
-            t_s = ahora - self._t0
-            self.sig_conteos.emit(conteos, t_s)
-            if unico:
-                break
-            # Mantener la cadencia descontando el tiempo de ejecución
-            pausa = self._integ_ms / 1000.0 - (time.time() - t_ini)
-            if pausa > 0:
-                self._seguir_midiendo.wait(timeout=pausa)
-        self.sig_log.emit("Bucle de medición finalizado.")
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Handlers de señales
+    # Handlers
     # ─────────────────────────────────────────────────────────────────────────
     def _log(self, msg: str):
-        ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        self.log.appendPlainText(f"[{ts}] {msg}")
+        ts = datetime.now().strftime("%H:%M:%S")
+        # Si más adelante quisieras una consola, volcar aquí.
+        print(f"[{ts}] {msg}")
 
     def _on_error(self, msg: str):
         self._log(f"ERROR: {msg}")
-        if self._midiendo:
-            self._detener_medicion()
+        QMessageBox.critical(self, "Error", msg)
+        self._detener_medicion()
 
-    def _on_conteos(self, conteos: int, t_s: float):
-        cps = conteos / (self._integ_ms / 1000.0)
-        self._total_conteos += conteos
-        self._mediciones_n  += 1
-        self._ventana_stats.append(cps)
-        self._hist_bins.append(cps)
-        self._timestamps.append(datetime.now().isoformat(timespec="milliseconds"))
+    def _on_progreso(self, p: float):
+        self.bar_progreso.setValue(int(round(p * 100)))
 
-        # Display
-        self.lbl_tasa.setText(self._fmt(cps))
-        if self._umbral_cps and cps > self._umbral_cps:
-            self.lbl_tasa.setStyleSheet(_DISPLAY_ALERTA)
-        else:
-            self.lbl_tasa.setStyleSheet(_DISPLAY_BASE)
-
-        elapsed = self._mediciones_n * self._integ_ms / 1000.0
-        self.lbl_total.setText(f"Total: {self._total_conteos:,} cuentas")
-        self.lbl_elapsed.setText(f"Tiempo: {elapsed:.1f} s")
-        self.lbl_n_med.setText(f"N: {self._mediciones_n:,} mediciones")
-
-        # Historial gráficas
-        self._hist_tasa.append((t_s, cps))
-        self._recortar(self._hist_tasa, t_s, VENTANA_PLOT_S)
-        self._hist_largo.append((t_s, cps))
-        self._recortar(self._hist_largo, t_s, VENTANA_LARGO_S)
+    def _on_array_listo(self, datos: np.ndarray, meta: dict):
+        self._datos_actuales = datos.copy()
+        n = len(datos)
 
         # Estadísticas
-        self._actualizar_stats()
+        max_c = int(datos.max())
+        min_c = int(datos.min())
+        avg_c = float(datos.mean())
+        diff  = max_c - min_c
 
-        # Gráficas (no bloquean: draw_idle)
-        self._refrescar_medicion()
-        self._refrescar_largo()
-        if self._mediciones_n % 5 == 0:  # histograma cada 5 puntos
-            self._refrescar_histograma()
+        self.lbl_n_bins.setText(f"{n:,}")
+        self.lbl_max_count.setText(f"{max_c:,}")
+        self.lbl_avg_count.setText(f"{avg_c:.2f}")
+        self.lbl_min_count.setText(f"{min_c:,}")
+        self.lbl_diff_count.setText(f"{diff:,}")
+        self.lbl_usb_rate.setText(f"{meta['tasa_meas_per_s']:.0f}")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Estadísticas
-    # ─────────────────────────────────────────────────────────────────────────
-    def _actualizar_stats(self):
-        arr = np.array(self._ventana_stats)
-        if arr.size == 0:
-            return
-        mu, sg = arr.mean(), arr.std()
-        mn, mx = arr.min(), arr.max()
-        snr     = mu / sg if sg > 0 else float("inf")
-        sigma_p = 100.0 * sg / mu if mu > 0 else float("inf")
-        self.lbl_media.setText(  f"Media: {self._fmt(mu).strip()}")
-        self.lbl_sigma.setText(  f"σ: {self._fmt(sg).strip()}")
-        self.lbl_min.setText(    f"Mín: {self._fmt(mn).strip()}")
-        self.lbl_max.setText(    f"Máx: {self._fmt(mx).strip()}")
-        self.lbl_snr.setText(    f"SNR: {snr:.1f}")
-        self.lbl_sigma_p.setText(f"σ/μ: {sigma_p:.2f} %")
+        # Banderas de estado
+        est = meta.get("estado", {})
+        for lbl, key in ((self.lbl_lost, "values_lost"),
+                          (self.lbl_over, "overtemperature"),
+                          (self.lbl_oflw, "overflow"),
+                          (self.lbl_sat,  "saturation")):
+            v = est.get(key, False)
+            lbl.setText("YES" if v else "no")
+            if v:
+                lbl.setStyleSheet(
+                    "background:#fbe5e3;color:#c4392f;"
+                    "border:1px solid #c4392f;padding:1px 6px;font-weight:bold;"
+                    "font-family:Menlo,Consolas,monospace;")
+            else:
+                lbl.setStyleSheet(
+                    "background:white;color:#1a1a1a;"
+                    "border:1px solid #b0b0b0;padding:1px 6px;"
+                    "font-family:Menlo,Consolas,monospace;")
 
-        # Estadísticas globales (Tab 2)
-        g = np.array(self._hist_bins)
-        self._g["media"].setText(self._fmt(g.mean()).strip())
-        self._g["mediana"].setText(self._fmt(float(np.median(g))).strip())
-        self._g["sigma"].setText(self._fmt(g.std()).strip())
-        self._g["min"].setText(self._fmt(g.min()).strip())
-        self._g["max"].setText(self._fmt(g.max()).strip())
-        self._g["n"].setText(str(len(g)))
+        # Alignment: tasa media en cps + traza
+        bin_len_s = meta["bin_length_ms"] / 1000.0
+        cps_avg   = avg_c / bin_len_s if bin_len_s > 0 else 0.0
+        self.lbl_alignment.setText(self._fmt_tasa(cps_avg))
+        t_now = time.time() - (self._t_inicio_med or time.time())
+        self._hist_align.append((t_now, cps_avg))
+        self._refrescar_alignment()
+
+        # Tabla
+        self._refrescar_tabla(datos)
+        # Graph
+        self._refrescar_graph(datos)
+        # Bar
+        self._refrescar_bar(datos)
+
+        # Reactivar botón si terminó
+        if not self._continuamente:
+            self._midiendo = False
+            self.btn_start.setEnabled(True)
+            self._tb_start.setEnabled(True)
+            self._tb_stop.setEnabled(False)
+
+        # Progreso al 100% al terminar
+        self.bar_progreso.setValue(100)
 
     @staticmethod
-    def _fmt(cps: float) -> str:
-        """Autoescalado: cps / kcps / Mcps."""
+    def _fmt_tasa(cps: float) -> str:
         if cps >= 1e6:
-            return f"{cps/1e6:9.4f}  Mcps"
+            return f"{cps/1e6:8.3f}  Mcps"
         if cps >= 1e3:
-            return f"{cps/1e3:9.3f}  kcps"
-        return f"{cps:9.1f}  cps"
+            return f"{cps/1e3:8.3f}  kcps"
+        return f"{cps:8.0f}  cps"
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Gráficas
+    # Refrescar gráficas
     # ─────────────────────────────────────────────────────────────────────────
-    @staticmethod
-    def _recortar(hist: deque, t_actual: float, ventana: float):
-        lim = t_actual - ventana
-        while hist and hist[0][0] < lim:
-            hist.popleft()
-
-    def _refrescar_medicion(self):
-        if not self._hist_tasa:
+    def _refrescar_alignment(self):
+        if not self._hist_align:
             return
-        xs = [t for t, _ in self._hist_tasa]
-        ys = [c for _, c in self._hist_tasa]
-        self.line_med.set_data(xs, ys)
-        t_max = xs[-1]
-        self.ax_med.set_xlim(max(0.0, t_max - VENTANA_PLOT_S), max(t_max, 1.0))
-        y_lo, y_hi = min(ys), max(ys)
-        if self._umbral_cps:
-            y_lo = min(y_lo, self._umbral_cps)
-            y_hi = max(y_hi, self._umbral_cps)
-        mg = max(0.05 * max(abs(y_hi), 1.0), 5.0)
-        self.ax_med.set_ylim(max(0.0, y_lo - mg), y_hi + mg)
-        self.canvas_med.draw_idle()
+        # Recortar a últimos 60 s
+        t_now = self._hist_align[-1][0]
+        while self._hist_align and self._hist_align[0][0] < t_now - 60:
+            self._hist_align.popleft()
+        xs = [t for t, _ in self._hist_align]
+        ys = [c for _, c in self._hist_align]
+        self.line_align.set_data(xs, ys)
+        self.ax_align.set_xlim(max(0, t_now - 60), max(t_now, 1.0))
+        if ys:
+            mg = max(0.1 * max(ys), 10.0)
+            self.ax_align.set_ylim(max(0, min(ys) - mg), max(ys) + mg)
+        self.canvas_align.draw_idle()
 
-    def _refrescar_largo(self):
-        if not self._hist_largo:
-            return
-        xs = [t for t, _ in self._hist_largo]
-        ys = [c for _, c in self._hist_largo]
-        self.line_largo.set_data(xs, ys)
-        t_max = xs[-1]
-        self.ax_largo.set_xlim(
-            max(0.0, t_max - VENTANA_LARGO_S), max(t_max, 1.0))
-        mg = max(0.05 * max(abs(max(ys)), 1.0), 5.0)
-        self.ax_largo.set_ylim(max(0.0, min(ys) - mg), max(ys) + mg)
-        self.canvas_largo.draw_idle()
+    def _refrescar_tabla(self, datos: np.ndarray):
+        # Limitar la tabla a 5000 filas para mantener fluidez
+        n_show = min(len(datos), 5000)
+        self.tabla.setRowCount(n_show)
+        for i in range(n_show):
+            self.tabla.setItem(i, 0, QTableWidgetItem(str(i + 1)))
+            self.tabla.setItem(i, 1, QTableWidgetItem(str(int(datos[i]))))
 
-    def _refrescar_histograma(self):
-        if len(self._hist_bins) < 5:
-            return
-        arr    = np.array(self._hist_bins)
-        n_bins = min(60, max(10, len(arr) // 8))
-        # Redibujar el eje completo (cla mantiene el facecolor del ax)
-        self.ax_hist.cla()
-        self.ax_hist.set_facecolor(AX_BG)
-        for sp in self.ax_hist.spines.values():
-            sp.set_color(GRID_COL)
-        self.ax_hist.tick_params(colors=FG, labelsize=8)
-        self.ax_hist.xaxis.label.set_color(FG)
-        self.ax_hist.yaxis.label.set_color(FG)
-        self.ax_hist.grid(True, color=GRID_COL, linewidth=0.5, alpha=0.6)
-        self.ax_hist.hist(arr, bins=n_bins, color=C_HIST, alpha=0.85,
-                          edgecolor=AX_BG, linewidth=0.3)
-        mu, sg = arr.mean(), arr.std()
-        self.ax_hist.axvline(mu, color=C_MAIN, ls="--", lw=1.1,
-                             label=f"μ = {self._fmt(mu).strip()}")
-        self.ax_hist.axvline(mu - sg, color=C_SET, ls=":", lw=0.8)
-        self.ax_hist.axvline(mu + sg, color=C_SET, ls=":", lw=0.8,
-                             label=f"σ = {self._fmt(sg).strip()}")
-        self.ax_hist.set_xlabel("Tasa [cps]")
-        self.ax_hist.set_ylabel("Frecuencia")
-        self.ax_hist.legend(labelcolor=FG, facecolor=AX_BG,
-                            edgecolor=GRID_COL, fontsize=7,
-                            loc="upper right")
-        self.canvas_hist.draw_idle()
+    def _refrescar_graph(self, datos: np.ndarray):
+        xs = np.arange(1, len(datos) + 1)
+        self.line_graph.set_data(xs, datos)
+        self.ax_graph.set_xlim(1, max(len(datos), 2))
+        y_max = float(datos.max()) if len(datos) else 1.0
+        self.ax_graph.set_ylim(0, y_max * 1.1 if y_max > 0 else 1.0)
+        self.canvas_graph.draw_idle()
 
-    def _limpiar_graficas(self):
-        self.line_med.set_data([], [])
-        self.line_largo.set_data([], [])
-        self.ax_med.set_xlim(0, VENTANA_PLOT_S)
-        self.ax_med.set_ylim(0, 100_000)
-        self.ax_largo.set_xlim(0, VENTANA_LARGO_S)
-        self.ax_largo.set_ylim(0, 100_000)
-        self.ax_hist.cla()
-        self.ax_hist.set_facecolor(AX_BG)
-        for c in (self.canvas_med, self.canvas_largo, self.canvas_hist):
-            c.draw_idle()
+    def _refrescar_bar(self, datos: np.ndarray):
+        self.ax_bar.cla()
+        self.ax_bar.set_facecolor(COL_PLOT)
+        for sp in self.ax_bar.spines.values():
+            sp.set_color(COL_BORDE)
+        self.ax_bar.tick_params(colors=COL_TXT, labelsize=9)
+        self.ax_bar.grid(True, color=COL_GRID, linewidth=0.6, alpha=0.9)
+        # Si el array es enorme, agrupar para que las barras sean visibles
+        n = len(datos)
+        if n <= 200:
+            xs = np.arange(1, n + 1); ys = datos
+        else:
+            grupos = 200
+            tam = n // grupos
+            ys = datos[:tam * grupos].reshape(grupos, tam).sum(axis=1)
+            xs = np.linspace(1, n, grupos)
+        self.ax_bar.bar(xs, ys, color=COL_AZUL, edgecolor=COL_LINEA,
+                        linewidth=0.3, alpha=0.85)
+        self.ax_bar.set_xlabel("Bin Number")
+        self.ax_bar.set_ylabel("Counts per Bin")
+        self.canvas_bar.draw_idle()
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Exportación CSV
+    # Exportar
     # ─────────────────────────────────────────────────────────────────────────
     def _guardar_csv(self):
-        if not self._hist_bins:
-            QMessageBox.information(self, "Sin datos",
-                                    "No hay datos para exportar.")
+        if self._datos_actuales is None:
+            QMessageBox.information(self, "No data",
+                                    "No hay datos adquiridos para exportar.")
             return
         ruta, _ = QFileDialog.getSaveFileName(
-            self, "Guardar datos SPCM",
+            self, "Save CSV",
             f"spcm_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             "CSV (*.csv)")
         if not ruta:
             return
         try:
-            rows = list(self._hist_largo)
-            ts_list = self._timestamps[-len(rows):]
             with open(ruta, "w", newline="", encoding="utf-8") as f:
                 w = csv.writer(f)
-                w.writerow(["timestamp", "t_s", "tasa_cps",
-                             "integ_ms", "dispositivo"])
-                dispositivo = self._driver.info_dispositivo
-                for i, (t_s, cps) in enumerate(rows):
-                    ts = ts_list[i] if i < len(ts_list) else ""
-                    w.writerow([ts, f"{t_s:.4f}", f"{cps:.2f}",
-                                self._integ_ms, dispositivo])
-            self.lbl_export.setText(f"Guardado: {Path(ruta).name}")
-            self._log(f"CSV guardado ({len(rows)} filas): {ruta}")
+                w.writerow(["bin_number", "counts"])
+                for i, c in enumerate(self._datos_actuales, start=1):
+                    w.writerow([i, int(c)])
+            self._log(f"CSV guardado: {ruta}")
+            QMessageBox.information(self, "Saved",
+                                    f"Datos guardados en:\n{ruta}")
         except Exception as e:
-            QMessageBox.critical(self, "Error al guardar", str(e))
+            QMessageBox.critical(self, "Error", str(e))
 
     # ─────────────────────────────────────────────────────────────────────────
     # Cierre seguro
     # ─────────────────────────────────────────────────────────────────────────
     def closeEvent(self, event):
-        self._seguir_midiendo.clear()
+        self._evt_detener.set()
         if isinstance(self._driver, DriverSPCM):
             try:
                 self._driver.desconectar()
@@ -920,6 +1180,8 @@ class MainWindow(QMainWindow):
 # ────────────────────────────────────────────────────────────────────────────
 def main():
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    app.setStyleSheet(STYLE_GLOBAL)
     win = MainWindow()
     win.show()
     sys.exit(app.exec())
