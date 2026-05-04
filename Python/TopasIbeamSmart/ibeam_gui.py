@@ -533,12 +533,12 @@ class MainWindow(QMainWindow):
         lf.setSpacing(4)
 
         self.sld_fine = QSlider(Qt.Orientation.Horizontal)
-        self.sld_fine.setRange(0, 100)
+        self.sld_fine.setRange(0, 2)
         self.sld_fine.setValue(0)
         self.sld_fine.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.sld_fine.setTickInterval(50)
-        self.sld_fine.setSingleStep(50)
-        self.sld_fine.setPageStep(50)
+        self.sld_fine.setTickInterval(1)
+        self.sld_fine.setSingleStep(1)
+        self.sld_fine.setPageStep(1)
         self.sld_fine.valueChanged.connect(self._on_fine_slider)
         lf.addWidget(self.sld_fine)
 
@@ -580,12 +580,12 @@ class MainWindow(QMainWindow):
         ls.setSpacing(4)
 
         self.sld_skill = QSlider(Qt.Orientation.Horizontal)
-        self.sld_skill.setRange(0, 100)
+        self.sld_skill.setRange(0, 2)
         self.sld_skill.setValue(0)
         self.sld_skill.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.sld_skill.setTickInterval(50)
-        self.sld_skill.setSingleStep(50)
-        self.sld_skill.setPageStep(50)
+        self.sld_skill.setTickInterval(1)
+        self.sld_skill.setSingleStep(1)
+        self.sld_skill.setPageStep(1)
         self.sld_skill.valueChanged.connect(self._on_skill_slider)
         ls.addWidget(self.sld_skill)
 
@@ -778,12 +778,7 @@ class MainWindow(QMainWindow):
             self.sld_fine.blockSignals(False)
 
     def _on_fine_slider(self, valor: int):
-        snapped = min([0, 50, 100], key=lambda x: abs(x - valor))
-        if self.sld_fine.value() != snapped:
-            self.sld_fine.blockSignals(True)
-            self.sld_fine.setValue(snapped)
-            self.sld_fine.blockSignals(False)
-        modo = {0: "off", 50: "a", 100: "b"}[snapped]
+        modo = {0: "off", 1: "a", 2: "b"}[valor]
         if modo == self._fine_modo or not self.driver.conectado():
             return
         self._fine_modo = modo
@@ -797,12 +792,7 @@ class MainWindow(QMainWindow):
         threading.Thread(target=_t, daemon=True).start()
 
     def _on_skill_slider(self, valor: int):
-        snapped = min([0, 50, 100], key=lambda x: abs(x - valor))
-        if self.sld_skill.value() != snapped:
-            self.sld_skill.blockSignals(True)
-            self.sld_skill.setValue(snapped)
-            self.sld_skill.blockSignals(False)
-        modo = {0: "off", 50: "1", 100: "2"}[snapped]
+        modo = {0: "off", 1: "1", 2: "2"}[valor]
         if modo == self._skill_modo or not self.driver.conectado():
             return
         self._skill_modo = modo
