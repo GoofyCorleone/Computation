@@ -111,20 +111,26 @@ EP_BULK_IN      = 0x82      # respuesta del dispositivo
 EP_INT_IN       = 0x81      # estado / eventos
 TIMEOUT_USB_MS  = 2000
 
-# Paleta clara (estética Thorlabs)
-COL_PANEL  = "#ececec"
-COL_PLOT   = "#fafafa"
-COL_GRID   = "#cfd6dd"
-COL_LINEA  = "#1f1f1f"
-COL_AZUL   = "#3a73c4"
-COL_VERDE  = "#3a8c3a"
-COL_ROJO   = "#c4392f"
-COL_TXT    = "#1a1a1a"
-COL_BORDE  = "#b0b0b0"
+# Paleta dark (Catppuccin Mocha — idéntica a ibeam_gui.py)
+COL_BG     = "#1e1e2e"
+COL_BG2    = "#181825"
+COL_PANEL  = "#1e1e2e"
+COL_PLOT   = "#181825"
+COL_GRID   = "#45475a"
+COL_LINEA  = "#cdd6fa"
+COL_AZUL   = "#89b4fa"
+COL_VERDE  = "#a6e3a1"
+COL_ROJO   = "#f38ba8"
+COL_LILA   = "#cba6f7"
+COL_AMBAR  = "#fab387"
+COL_BARRA  = "#74c7ec"
+COL_TXT    = "#cdd6f4"
+COL_TXT_DIM = "#a6adc8"
+COL_BORDE  = "#45475a"
 
 # Estilo del título "THORLABS"
 ESTILO_LOGO = (
-    "color:#c4392f;"
+    "color:#f38ba8;"
     "font-family:'Helvetica',sans-serif;"
     "font-size:18px;"
     "font-weight:bold;"
@@ -132,74 +138,139 @@ ESTILO_LOGO = (
     "padding-right:12px;"
 )
 
-# Hoja de estilo global
+# Hoja de estilo global — dark Catppuccin
 STYLE_GLOBAL = """
 QMainWindow, QWidget {
-    background-color: #ececec;
-    color: #1a1a1a;
+    background-color: #1e1e2e;
+    color: #cdd6f4;
     font-size: 11px;
 }
 QGroupBox {
-    background-color: #f5f5f5;
-    border: 1px solid #b0b0b0;
-    border-radius: 3px;
+    background-color: #181825;
+    border: 1px solid #45475a;
+    border-radius: 4px;
     margin-top: 12px;
     padding: 6px 4px 4px 4px;
     font-weight: bold;
+    color: #89b4fa;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top center;
     padding: 0 6px;
-    background-color: #ececec;
-    color: #1a1a1a;
+    background-color: #1e1e2e;
+    color: #89b4fa;
 }
-QLabel { background-color: transparent; }
+QLabel { background-color: transparent; color: #cdd6f4; }
 QPushButton {
-    background-color: #f8f8f8;
-    border: 1px solid #909090;
-    border-radius: 2px;
+    background-color: #313244;
+    color: #cdd6f4;
+    border: 1px solid #45475a;
+    border-radius: 3px;
     padding: 4px 10px;
 }
-QPushButton:hover { background-color: #e8e8e8; }
-QPushButton:disabled { color: #888; }
+QPushButton:hover { background-color: #45475a; }
+QPushButton:pressed { background-color: #585b70; }
+QPushButton:disabled { color: #6c7086; background-color: #181825; }
 QSpinBox, QDoubleSpinBox, QComboBox, QLineEdit {
-    background-color: white;
-    border: 1px solid #b0b0b0;
-    padding: 1px 2px;
+    background-color: #11111b;
+    color: #cdd6f4;
+    border: 1px solid #45475a;
+    border-radius: 2px;
+    padding: 2px 4px;
+    selection-background-color: #585b70;
 }
+QSpinBox::up-button, QSpinBox::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+    background-color: #313244;
+    border: none;
+    width: 14px;
+}
+QComboBox QAbstractItemView {
+    background-color: #181825;
+    color: #cdd6f4;
+    selection-background-color: #45475a;
+    border: 1px solid #45475a;
+}
+QCheckBox { color: #cdd6f4; }
+QCheckBox::indicator {
+    width: 14px; height: 14px;
+    border: 1px solid #45475a;
+    background: #11111b;
+    border-radius: 2px;
+}
+QCheckBox::indicator:checked { background: #89b4fa; border-color: #89b4fa; }
 QTabWidget::pane {
-    border: 1px solid #b0b0b0;
-    background: white;
+    border: 1px solid #45475a;
+    background: #181825;
+    top: -1px;
 }
 QTabBar::tab {
-    background: #e0e0e0;
-    border: 1px solid #b0b0b0;
-    padding: 5px 16px;
-}
-QTabBar::tab:selected {
-    background: white;
-    border-bottom: 1px solid white;
-}
-QTableWidget {
-    background-color: white;
-    gridline-color: #d0d0d0;
-}
-QHeaderView::section {
-    background-color: #e0e0e0;
-    border: 1px solid #b0b0b0;
-    padding: 3px;
+    background: #1e1e2e;
+    color: #a6adc8;
+    border: 1px solid #45475a;
+    border-bottom: none;
+    padding: 6px 18px;
     font-weight: bold;
 }
-QStatusBar { background-color: #d8d8d8; border-top: 1px solid #b0b0b0; }
-QToolBar { background-color: #ececec; border: none; spacing: 2px; }
-QProgressBar {
-    border: 1px solid #b0b0b0;
-    background-color: white;
-    text-align: center;
-    height: 14px;
+QTabBar::tab:selected {
+    background: #181825;
+    color: #89b4fa;
+    border-bottom: 2px solid #89b4fa;
 }
-QProgressBar::chunk { background-color: #3a73c4; }
+QTabBar::tab:hover:!selected { color: #cdd6f4; }
+QTableWidget {
+    background-color: #11111b;
+    color: #cdd6f4;
+    gridline-color: #313244;
+    alternate-background-color: #181825;
+}
+QHeaderView::section {
+    background-color: #313244;
+    color: #89b4fa;
+    border: 1px solid #45475a;
+    padding: 4px;
+    font-weight: bold;
+}
+QStatusBar {
+    background-color: #11111b;
+    color: #cdd6f4;
+    border-top: 1px solid #45475a;
+}
+QStatusBar::item { border: none; }
+QToolBar {
+    background-color: #1e1e2e;
+    border-bottom: 1px solid #45475a;
+    spacing: 4px; padding: 2px;
+}
+QToolButton {
+    background-color: transparent;
+    color: #cdd6f4;
+    padding: 4px;
+    border-radius: 3px;
+}
+QToolButton:hover { background-color: #313244; }
+QMenuBar {
+    background-color: #1e1e2e; color: #cdd6f4;
+    border-bottom: 1px solid #45475a;
+}
+QMenuBar::item { background-color: transparent; padding: 4px 10px; }
+QMenuBar::item:selected { background-color: #313244; }
+QMenu {
+    background-color: #181825; color: #cdd6f4;
+    border: 1px solid #45475a;
+}
+QMenu::item:selected { background-color: #313244; }
+QProgressBar {
+    border: 1px solid #45475a;
+    background-color: #11111b;
+    color: #cdd6f4;
+    text-align: center;
+    height: 16px;
+    border-radius: 2px;
+}
+QProgressBar::chunk { background-color: #89b4fa; border-radius: 2px; }
+QSplitter::handle { background-color: #45475a; }
 """
 
 
@@ -331,19 +402,24 @@ class DriverSPCM:
                    detener_event: threading.Event,
                    callback_progreso=None) -> np.ndarray:
         """
-        Adquiere un array de n_bins conteos.
+        Adquiere un array de n_bins conteos del SPCM50A real.
 
-        ⚠ IMPLEMENTAR según protocolo real del SPCM50A. Esquema típico:
-          - Enviar paquete CONFIG (bin_length, n_bins, time_between, blind)
-          - Enviar START
-          - Leer del puerto mientras llegan datos (n_bins * 4 bytes en
-            little-endian, típicamente)
-          - Devolver np.ndarray de int32
+        ⚠ IMPLEMENTAR según protocolo binario propietario del SPCM50A.
+        Firma del callback: callback_progreso(fraccion, partial_array_view).
+
+        Esquema típico:
+          - Enviar paquete CONFIG por EP_BULK_OUT (0x02) con bin_length,
+            n_bins, time_between, pulse_blind.
+          - Enviar START.
+          - Leer ráfagas del EP_BULK_IN (0x82): cada bin probablemente es
+            un entero little-endian 4 B; en lotes de 16 bins/paquete.
+          - Acumular y emitir partial_array por callback cada lote.
+          - Devolver np.ndarray de int64.
         """
         with self._lock:
             raise NotImplementedError(
-                "Protocolo USB no implementado — ver docstring de "
-                "DriverSPCM.leer_array(). Usando simulador."
+                "Protocolo USB binario no implementado — la GUI usa el "
+                "simulador. Ver docstring de DriverSPCM.leer_array()."
             )
 
     def leer_estado(self) -> dict:
@@ -360,19 +436,24 @@ class DriverSPCM:
 
 
 class SimuladorSPCM:
-    """Genera arrays sintéticos con Poisson + deriva lenta + dark counts."""
+    """
+    Simulador realista del SPCM50A con sensor TAPADO (dark counts).
+    Tasa típica de un Si APD a temperatura ambiente: 30–80 cps.
+    Distribución de Poisson con jitter pequeño.
+    """
     def __init__(self):
-        self.tasa_base_cps    = 48_500.0
-        self.cuentas_oscuras  = 28
+        # Dark counts realistas para Si APD con sensor cubierto:
+        # 50 cps base + variación lenta de ±5 cps.
+        self.tasa_dark_cps  = 50.0
         self._rng = np.random.default_rng()
 
     @property
     def serial_str(self) -> str:
-        return "SPCM50A SIMULADO"
+        return "SIMULADOR (sin hardware)"
 
     @property
     def info(self) -> dict:
-        return {"device": "<simulación>", "serial_number": "SIM-000001"}
+        return {"device": "<simulación>", "serial_number": "SIM-DARK"}
 
     def conectar(self, *_args, **_kw): pass
     def desconectar(self):              pass
@@ -383,35 +464,35 @@ class SimuladorSPCM:
                    detener_event: threading.Event,
                    callback_progreso=None) -> np.ndarray:
         """
-        Simula la adquisición en tiempo real, emitiendo progreso.
-        Respeta el tiempo total ≈ n_bins * (bin_length + time_between).
+        Simula la adquisición en tiempo real, emitiendo progreso CON
+        datos parciales. La firma del callback es:
+            callback_progreso(fraccion_completada, partial_array_view)
+        donde `partial_array_view` son los conteos acumulados hasta `j`.
+        Respeta tiempo real ≈ n_bins × (bin_length + time_between).
         """
         counts = np.zeros(n_bins, dtype=np.int64)
-        rate_per_bin = self.tasa_base_cps * (bin_length_ms / 1000.0)
+        rate_per_bin = self.tasa_dark_cps * (bin_length_ms / 1000.0)
 
-        # Tamaño de chunk para emitir progreso suave (~50 actualizaciones)
+        # ~50 actualizaciones a lo largo de la adquisición
         chunk_n   = max(1, n_bins // 50)
         per_bin_s = (bin_length_ms + time_between_ms) / 1000.0
-        # Acelerar simulación si bin_length es muy corto pero n_bins grande:
-        # mantenemos siempre ≥ 0.02 s por chunk para visualización
-        chunk_t   = max(0.02, chunk_n * per_bin_s)
+        chunk_t   = max(0.05, chunk_n * per_bin_s)
 
         t0 = time.time()
         for i in range(0, n_bins, chunk_n):
             if detener_event.is_set():
                 break
             j = min(i + chunk_n, n_bins)
-            # Deriva sinusoidal lenta + dark counts
+            # Deriva muy lenta ±10 % + Poisson
             idx = np.arange(i, j)
             t   = idx * per_bin_s + (time.time() - t0)
-            envolvente = 1.0 + 0.10 * np.sin(2 * np.pi * t / 30.0)
-            r = rate_per_bin * envolvente + self.cuentas_oscuras * (bin_length_ms / 1000.0)
-            counts[i:j] = self._rng.poisson(r)
+            envolvente = 1.0 + 0.10 * np.sin(2 * np.pi * t / 60.0)
+            r = rate_per_bin * envolvente
+            counts[i:j] = self._rng.poisson(np.maximum(r, 0))
 
-            # Esperar el "tiempo" que tardaría en hardware
             time.sleep(chunk_t)
             if callback_progreso:
-                callback_progreso(j / n_bins)
+                callback_progreso(j / n_bins, counts[:j])
 
         return counts
 
@@ -428,7 +509,7 @@ class SimuladorSPCM:
 # Helpers gráficos
 # ────────────────────────────────────────────────────────────────────────────
 def _make_fig(w: float = 5.0, h: float = 3.5):
-    fig = Figure(figsize=(w, h), tight_layout=True, facecolor="white")
+    fig = Figure(figsize=(w, h), tight_layout=True, facecolor=COL_BG)
     ax  = fig.add_subplot(111, facecolor=COL_PLOT)
     for sp in ax.spines.values():
         sp.set_color(COL_BORDE)
@@ -436,7 +517,7 @@ def _make_fig(w: float = 5.0, h: float = 3.5):
     ax.xaxis.label.set_color(COL_TXT)
     ax.yaxis.label.set_color(COL_TXT)
     ax.title.set_color(COL_TXT)
-    ax.grid(True, color=COL_GRID, linewidth=0.6, alpha=0.9)
+    ax.grid(True, color=COL_GRID, linewidth=0.5, alpha=0.6)
     return fig, ax
 
 
@@ -450,7 +531,7 @@ def _icon(style: QStyle, sp: QStyle.StandardPixmap) -> QIcon:
 class MainWindow(QMainWindow):
 
     sig_log         = pyqtSignal(str)
-    sig_progreso    = pyqtSignal(float)               # 0..1
+    sig_progreso    = pyqtSignal(float, object)        # (0..1, partial ndarray)
     sig_array_listo = pyqtSignal(object, object)      # (np.ndarray, dict)
     sig_error       = pyqtSignal(str)
     sig_conexion    = pyqtSignal(bool, str)           # (conectado, info)
@@ -472,6 +553,11 @@ class MainWindow(QMainWindow):
         self._hilo_med: threading.Thread | None = None
         self._t_inicio_med: float | None = None
         self._datos_actuales: np.ndarray | None = None
+        # Parámetros activos de la medición en curso (capturados al iniciar)
+        self._bin_length_ms: float = DEFAULTS["bin_length_ms"]
+        self._n_bins_actual: int   = DEFAULTS["bins_per_array"]
+        # Throttling de gráficas en vivo
+        self._t_ultimo_refresh: float = 0.0
 
         # Historial para alignment
         self._hist_align: deque[tuple[float, float]] = deque(maxlen=600)
@@ -494,6 +580,17 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         lay = QVBoxLayout(central); lay.setContentsMargins(4, 4, 4, 4)
+        lay.setSpacing(4)
+
+        # Banner de estado del dispositivo (visible siempre)
+        self.banner = QLabel("Buscando dispositivo …")
+        self.banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.banner.setStyleSheet(
+            f"background:{COL_BG2};color:{COL_LILA};"
+            f"border:1px solid {COL_BORDE};border-radius:3px;"
+            "padding:6px;font-weight:bold;font-size:12px;"
+            "letter-spacing:1px;")
+        lay.addWidget(self.banner)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(4)
@@ -506,7 +603,7 @@ class MainWindow(QMainWindow):
         splitter.setSizes([300, 980])
         splitter.setCollapsible(0, False)
         splitter.setCollapsible(1, False)
-        lay.addWidget(splitter)
+        lay.addWidget(splitter, 1)
 
         # Status bar
         self._construir_status_bar()
@@ -656,8 +753,9 @@ class MainWindow(QMainWindow):
                     self.lbl_n_bins, self.lbl_max_count, self.lbl_avg_count,
                     self.lbl_min_count, self.lbl_diff_count, self.lbl_usb_rate):
             lbl.setStyleSheet(
-                "background:white;border:1px solid #b0b0b0;padding:1px 4px;"
-                "font-family:Menlo,Consolas,monospace;")
+                f"background:{COL_BG2};color:{COL_AZUL};"
+                f"border:1px solid {COL_BORDE};padding:1px 4px;"
+                "font-family:Menlo,Consolas,monospace;font-weight:bold;")
             lbl.setMinimumWidth(80)
             lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
@@ -681,8 +779,9 @@ class MainWindow(QMainWindow):
         self.lbl_sat  = QLabel("no")
         for lbl in (self.lbl_lost, self.lbl_over, self.lbl_oflw, self.lbl_sat):
             lbl.setStyleSheet(
-                "background:white;border:1px solid #b0b0b0;padding:1px 6px;"
-                "font-family:Menlo,Consolas,monospace;")
+                f"background:{COL_BG2};color:{COL_VERDE};"
+                f"border:1px solid {COL_BORDE};padding:1px 6px;"
+                "font-family:Menlo,Consolas,monospace;font-weight:bold;")
             lbl.setMinimumWidth(40)
             lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         go.addRow("Values lost",            self.lbl_lost)
@@ -710,9 +809,9 @@ class MainWindow(QMainWindow):
         self.lbl_alignment = QLabel("0  cps")
         self.lbl_alignment.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_alignment.setStyleSheet(
-            "background:#0d0d1a;color:#3a8c3a;"
+            f"background:{COL_BG2};color:{COL_VERDE};"
             "font-family:'Courier New',monospace;font-size:64px;"
-            "font-weight:bold;border:2px solid #b0b0b0;border-radius:4px;"
+            "font-weight:bold;border:2px solid #45475a;border-radius:4px;"
             "padding:20px;letter-spacing:6px;")
         gl.addWidget(self.lbl_alignment)
         lay.addWidget(gb, 1)
@@ -723,7 +822,8 @@ class MainWindow(QMainWindow):
         self.ax_align.set_xlabel("t [s]")
         self.ax_align.set_ylabel("Count rate [cps]")
         self.canvas_align = FigureCanvas(fig_a)
-        self.line_align,  = self.ax_align.plot([], [], color=COL_AZUL, lw=1.4)
+        self.line_align,  = self.ax_align.plot([], [], color=COL_AZUL, lw=1.4,
+                                                marker=".", ms=3)
         gl2.addWidget(self.canvas_align)
         lay.addWidget(gb2, 2)
         return w
@@ -737,8 +837,6 @@ class MainWindow(QMainWindow):
         self.tabla.verticalHeader().setVisible(False)
         self.tabla.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.tabla.setAlternatingRowColors(True)
-        self.tabla.setStyleSheet(
-            "alternate-background-color:#f5f5f5;background-color:white;")
         lay.addWidget(self.tabla)
         return w
 
@@ -748,7 +846,7 @@ class MainWindow(QMainWindow):
         self.ax_graph.set_xlabel("Bin Number")
         self.ax_graph.set_ylabel("Counts per Bin")
         self.canvas_graph = FigureCanvas(fig_g)
-        self.line_graph,  = self.ax_graph.plot([], [], color=COL_LINEA, lw=0.9)
+        self.line_graph,  = self.ax_graph.plot([], [], color=COL_AZUL, lw=0.9)
         lay.addWidget(self.canvas_graph)
         return w
 
@@ -837,16 +935,40 @@ class MainWindow(QMainWindow):
         if conectado:
             self.lbl_estado.setText("● Conectado")
             self.lbl_estado.setStyleSheet(
-                "color:#3a8c3a;font-weight:bold;")
+                f"color:{COL_VERDE};font-weight:bold;")
             self.a_conectar.setText("Disconnect")
+            # Banner verde: dispositivo conectado pero protocolo aún no
+            # implementado → al iniciar adquisición caerá al simulador.
+            self.banner.setText(
+                f"●  DISPOSITIVO CONECTADO — {info}    "
+                f"·    Protocolo binario sin implementar: la adquisición "
+                f"usará el SIMULADOR (~50 cps dark counts)")
+            self.banner.setStyleSheet(
+                f"background:{COL_BG2};color:{COL_AMBAR};"
+                f"border:2px solid {COL_AMBAR};border-radius:3px;"
+                "padding:6px;font-weight:bold;font-size:12px;"
+                "letter-spacing:1px;")
         else:
             if self._simulacion:
-                self.lbl_estado.setText("● Modo simulación (sin hardware)")
+                self.lbl_estado.setText("● Modo simulación")
                 self.lbl_estado.setStyleSheet(
-                    "color:#a06030;font-weight:bold;")
+                    f"color:{COL_LILA};font-weight:bold;")
+                self.banner.setText(
+                    "▲  MODO SIMULACIÓN — sin dispositivo USB conectado.   "
+                    "Datos sintéticos (Poisson, ~50 cps dark counts)")
+                self.banner.setStyleSheet(
+                    f"background:{COL_BG2};color:{COL_LILA};"
+                    f"border:2px solid {COL_LILA};border-radius:3px;"
+                    "padding:6px;font-weight:bold;font-size:12px;"
+                    "letter-spacing:1px;")
             else:
                 self.lbl_estado.setText("○ Desconectado")
-                self.lbl_estado.setStyleSheet("color:#666;")
+                self.lbl_estado.setStyleSheet(f"color:{COL_TXT_DIM};")
+                self.banner.setText("○  DESCONECTADO")
+                self.banner.setStyleSheet(
+                    f"background:{COL_BG2};color:{COL_TXT_DIM};"
+                    f"border:1px solid {COL_BORDE};border-radius:3px;"
+                    "padding:6px;font-weight:bold;font-size:12px;")
             self.a_conectar.setText("Connect")
         self.lbl_serial.setText(info)
 
@@ -924,10 +1046,16 @@ class MainWindow(QMainWindow):
         t_between   = self.spn_time_between.value()
         pulse_blind = self.spn_pulse_blind.value()
 
+        # Capturar para que _on_progreso pueda calcular la tasa en vivo
+        self._bin_length_ms = bin_len
+        self._n_bins_actual = n_bins
+
         duracion_s = n_bins * (bin_len + t_between) / 1000.0
         self.lbl_duracion.setText(f"{duracion_s:.1f} s")
         self.lbl_t_inicio.setText(datetime.now().strftime("%H:%M:%S"))
         self._t_inicio_med = time.time()
+        self._hist_align.clear()
+        self.tabla.setRowCount(0)
 
         self._log(f"Medición iniciada: {n_bins} bins × {bin_len} ms "
                   f"(continuo={self._continuamente})")
@@ -948,7 +1076,7 @@ class MainWindow(QMainWindow):
                         time_between_ms=params["time_between_ms"],
                         pulse_blind_ns=params["pulse_blind_ns"],
                         detener_event=self._evt_detener,
-                        callback_progreso=lambda p: self.sig_progreso.emit(p),
+                        callback_progreso=lambda p, arr: self.sig_progreso.emit(p, arr),
                     )
                 except NotImplementedError:
                     if primer_intento and not usar_simulador:
@@ -962,7 +1090,7 @@ class MainWindow(QMainWindow):
                         time_between_ms=params["time_between_ms"],
                         pulse_blind_ns=params["pulse_blind_ns"],
                         detener_event=self._evt_detener,
-                        callback_progreso=lambda p: self.sig_progreso.emit(p),
+                        callback_progreso=lambda p, arr: self.sig_progreso.emit(p, arr),
                     )
                 except Exception as e:
                     self.sig_error.emit(str(e))
@@ -1009,8 +1137,51 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Error", msg)
         self._detener_medicion()
 
-    def _on_progreso(self, p: float):
+    def _on_progreso(self, p: float, partial: np.ndarray | None):
         self.bar_progreso.setValue(int(round(p * 100)))
+        if partial is None or len(partial) == 0:
+            return
+        # Live update: estadísticas, alignment display, gráficas y tabla
+        bin_len_s = max(self._bin_length_ms / 1000.0, 1e-9)
+        n = len(partial)
+        max_c = int(partial.max())
+        min_c = int(partial.min())
+        avg_c = float(partial.mean())
+        diff  = max_c - min_c
+        cps_avg = avg_c / bin_len_s
+
+        # Display LCD grande con la tasa promedio en cps
+        self.lbl_alignment.setText(self._fmt_tasa(cps_avg))
+        # Color según magnitud (dark counts = verde, alta = ámbar)
+        color = COL_VERDE if cps_avg < 1000 else (COL_AMBAR if cps_avg < 1e5 else COL_ROJO)
+        self.lbl_alignment.setStyleSheet(
+            f"background:{COL_BG2};color:{color};"
+            "font-family:'Courier New',monospace;font-size:64px;"
+            "font-weight:bold;border:2px solid #45475a;border-radius:4px;"
+            "padding:20px;letter-spacing:6px;")
+
+        # Histórico para la traza de alignment
+        t_now = time.time() - (self._t_inicio_med or time.time())
+        self._hist_align.append((t_now, cps_avg))
+        self._refrescar_alignment()
+
+        # Measurement Properties — actualización en vivo
+        self.lbl_n_bins.setText(f"{n:,}")
+        self.lbl_max_count.setText(f"{max_c:,}")
+        self.lbl_avg_count.setText(f"{avg_c:.3f}")
+        self.lbl_min_count.setText(f"{min_c:,}")
+        self.lbl_diff_count.setText(f"{diff:,}")
+
+        # Gráficas Graph y Bar — sólo si la pestaña activa lo amerita,
+        # para no penalizar rendimiento durante adquisiciones largas.
+        idx_tab = self.tabs.currentIndex()
+        if idx_tab == 2:   # Graph
+            self._refrescar_graph(partial)
+        elif idx_tab == 3: # Bar
+            self._refrescar_bar(partial)
+        elif idx_tab == 1: # Table
+            # Sólo pinta los nuevos bins en la cola
+            self._refrescar_tabla_incremental(partial)
 
     def _on_array_listo(self, datos: np.ndarray, meta: dict):
         self._datos_actuales = datos.copy()
@@ -1039,13 +1210,13 @@ class MainWindow(QMainWindow):
             lbl.setText("YES" if v else "no")
             if v:
                 lbl.setStyleSheet(
-                    "background:#fbe5e3;color:#c4392f;"
-                    "border:1px solid #c4392f;padding:1px 6px;font-weight:bold;"
+                    f"background:{COL_BG2};color:{COL_ROJO};"
+                    f"border:2px solid {COL_ROJO};padding:1px 6px;font-weight:bold;"
                     "font-family:Menlo,Consolas,monospace;")
             else:
                 lbl.setStyleSheet(
-                    "background:white;color:#1a1a1a;"
-                    "border:1px solid #b0b0b0;padding:1px 6px;"
+                    f"background:{COL_BG2};color:{COL_VERDE};"
+                    f"border:1px solid {COL_BORDE};padding:1px 6px;font-weight:bold;"
                     "font-family:Menlo,Consolas,monospace;")
 
         # Alignment: tasa media en cps + traza
@@ -1108,6 +1279,19 @@ class MainWindow(QMainWindow):
             self.tabla.setItem(i, 0, QTableWidgetItem(str(i + 1)))
             self.tabla.setItem(i, 1, QTableWidgetItem(str(int(datos[i]))))
 
+    def _refrescar_tabla_incremental(self, partial: np.ndarray):
+        """Añade sólo las filas nuevas a la tabla (en vivo)."""
+        n_actual = self.tabla.rowCount()
+        n_total  = min(len(partial), 5000)
+        if n_total <= n_actual:
+            return
+        self.tabla.setRowCount(n_total)
+        for i in range(n_actual, n_total):
+            self.tabla.setItem(i, 0, QTableWidgetItem(str(i + 1)))
+            self.tabla.setItem(i, 1, QTableWidgetItem(str(int(partial[i]))))
+        # Auto-scroll al final
+        self.tabla.scrollToBottom()
+
     def _refrescar_graph(self, datos: np.ndarray):
         xs = np.arange(1, len(datos) + 1)
         self.line_graph.set_data(xs, datos)
@@ -1122,7 +1306,9 @@ class MainWindow(QMainWindow):
         for sp in self.ax_bar.spines.values():
             sp.set_color(COL_BORDE)
         self.ax_bar.tick_params(colors=COL_TXT, labelsize=9)
-        self.ax_bar.grid(True, color=COL_GRID, linewidth=0.6, alpha=0.9)
+        self.ax_bar.xaxis.label.set_color(COL_TXT)
+        self.ax_bar.yaxis.label.set_color(COL_TXT)
+        self.ax_bar.grid(True, color=COL_GRID, linewidth=0.5, alpha=0.6)
         # Si el array es enorme, agrupar para que las barras sean visibles
         n = len(datos)
         if n <= 200:
@@ -1132,8 +1318,8 @@ class MainWindow(QMainWindow):
             tam = n // grupos
             ys = datos[:tam * grupos].reshape(grupos, tam).sum(axis=1)
             xs = np.linspace(1, n, grupos)
-        self.ax_bar.bar(xs, ys, color=COL_AZUL, edgecolor=COL_LINEA,
-                        linewidth=0.3, alpha=0.85)
+        self.ax_bar.bar(xs, ys, color=COL_BARRA, edgecolor=COL_AZUL,
+                        linewidth=0.3, alpha=0.9)
         self.ax_bar.set_xlabel("Bin Number")
         self.ax_bar.set_ylabel("Counts per Bin")
         self.canvas_bar.draw_idle()

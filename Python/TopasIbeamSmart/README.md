@@ -350,12 +350,43 @@ TopasIbeamSmart/
 
 ## GUI del SPCM50A/M — Uso
 
-Aplicación con apariencia y funcionalidad similares al software original
-**Thorlabs Single Photon Counter GUI**: barra de menú (File / Device /
-Option / Help), barra de herramientas con logo THORLABS, panel izquierdo
-con Operating Mode + Settings + Start + Measurement Properties + Occurrences,
-panel derecho con cuatro pestañas (Alignment / Table / Graph / Bar) y
-status bar con número de serie del dispositivo.
+Aplicación con apariencia y layout del software original **Thorlabs Single
+Photon Counter GUI** pero con **tema oscuro Catppuccin Mocha** (igual al
+del láser): barra de menú (File / Device / Option / Help), toolbar con
+logo THORLABS, banner superior con el estado de conexión, panel izquierdo
+con *Operating Mode + Settings + Start + Measurement Properties +
+Occurrences*, panel derecho con cuatro pestañas
+(*Alignment / Table / Graph / Bar*) y status bar con número de serie.
+
+### Modos de operación de la app
+
+La app distingue tres estados, indicados por un **banner de color** en la
+parte superior de la ventana:
+
+| Banner | Significado | Datos mostrados |
+|--------|-------------|-----------------|
+| 🟢 verde *DISPOSITIVO CONECTADO* + (protocolo implementado) | SPCM50A real, leyendo bins por USB | Datos reales del Si APD |
+| 🟡 ámbar *DISPOSITIVO CONECTADO — protocolo sin implementar* | SPCM50A real detectado, pero el protocolo binario propietario de Thorlabs aún no está implementado | **Simulador** (~50 cps dark counts), no datos reales |
+| 🟣 lila *MODO SIMULACIÓN* | Sin dispositivo USB | Simulador (~50 cps dark counts) |
+
+> ⚠ **Importante**: Mientras `DriverSPCM.leer_array()` no esté implementado,
+> el conteo en pantalla **siempre proviene del simulador** aunque el
+> dispositivo esté conectado. El simulador reproduce dark counts típicos
+> de un Si APD a temperatura ambiente (~50 cps con sensor cubierto),
+> que es lo que se espera al verificar el ruido electrónico del detector.
+
+### Vista en vivo
+
+El conteo se actualiza **en tiempo real** durante la adquisición, sin
+esperar a que termine el array completo:
+
+- **Display LCD grande** en la pestaña Alignment con la tasa media en cps
+  (verde si < 1000 cps, ámbar 1k–100k, rojo > 100k)
+- Trazo de la tasa vs tiempo (últimos 60 s)
+- Panel *Measurement Properties* (Number of Bins, Max/Avg/Min Photon Count,
+  Difference Max/Min) actualizado a ~50 Hz
+- Pestañas **Graph / Bar / Table** se actualizan progresivamente
+  conforme entran los bins (sólo la pestaña activa, para mantener fluidez)
 
 ### Instalación de dependencias
 
