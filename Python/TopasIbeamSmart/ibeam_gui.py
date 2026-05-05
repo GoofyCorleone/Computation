@@ -965,6 +965,22 @@ class MainWindow(QMainWindow):
 
     def _sincronizar(self):
         niveles  = self.driver.leer_niveles()
+        # La potencia óptica de salida del iBeam Smart = SUMA de los dos
+        # canales (CH1 + CH2). Si CH2 quedó con un valor alto de una sesión
+        # anterior, los cambios en CH1 parecen no surtir efecto (la salida
+        # queda 'pegada' al valor de CH2). Para evitar esa confusión,
+        # forzamos CH2 = 0 al conectar y dejamos a CH1 como único control.
+        if niveles.get(2, 0.0) > 0.0:
+            self.sig_log.emit(
+                f"[AVISO] CH2 = {niveles[2]:.3f} mW (de una sesión previa). "
+                "Forzando CH2 = 0 para que CH1 controle la potencia.")
+            try:
+                self.driver.set_potencia(2, 0.0)
+                niveles_recheq = self.driver.leer_niveles()
+                if niveles_recheq:
+                    niveles = niveles_recheq
+            except Exception as e:
+                self.sig_log.emit(f"!!! No se pudo poner CH2 = 0: {e}")
         setpoint = self.driver.leer_setpoint_temp_C()
         temp     = self.driver.leer_temperatura_C()
         tec      = self.driver.leer_estado_tec()

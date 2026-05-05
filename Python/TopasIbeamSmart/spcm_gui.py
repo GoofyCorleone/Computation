@@ -51,10 +51,10 @@ Empaquetado: PyInstaller (`dist/SPCM50AM.app`). El bundle incluye
 libusb-1.0.dylib (–add-binary).
 """
 
-import csv
 import ctypes.util
 import math
 import os
+import struct
 import sys
 import threading
 import time
@@ -428,30 +428,44 @@ class DriverSPCM:
     """
     Driver USB para Thorlabs SPCM50A/M (VID 0x1313, PID 0x8098).
 
-    Endpoints (verificados en SPCM50A M00296614):
-      - 0x02 OUT bulk (64 B)  — comandos
-      - 0x82 IN  bulk (64 B)  — datos
-      - 0x81 IN  interrupt (2 B) — estado
+    Comunicación USBTMC + USB488 (clase 0xFE/0x03/0x01). Comandos SCPI
+    según el manual oficial "SPCMxxA Operation Manual" (Thorlabs, 2020),
+    sección 4 "SCPI Commands".
 
-    PROTOCOLO PROPIETARIO — pendiente de captura/documentación.
-    `leer_array()` lanza NotImplementedError; la GUI cae al simulador
-    automáticamente, manteniendo el dispositivo conectado.
+    Endpoints:
+      - 0x02 OUT bulk (64 B)
+      - 0x82 IN  bulk (64 B)
+      - 0x81 IN  interrupt (2 B, no usado)
 
-    Para implementar el protocolo:
-      1. Capturar tráfico USB con Wireshark + USBPcap (Windows) usando
-         el "Thorlabs Single Photon Counter GUI" como referencia.
-      2. Identificar comandos de setup, start, lectura y estado.
-      3. Reemplazar el cuerpo de leer_array() y leer_estado() abajo.
+    Comandos clave verificados en hardware (SPCM50A M00296614):
+      :SENS:COUN:GATE:MODE 2     → free running timed counter
+      :SENS:COUN:GATE:APER <s>   → bin length en segundos
+      :SENS:COUN:GATE:DEL  <s>   → delay entre bins
+      :SENS:COUN:ARR:STAT 0|1    → continuo (0) o array (1)
+      :SENS:COUN:APD:GATE 0|1    → APD siempre activa (0) o gated (1)
+      MEAS:STAR                  → arrancar medición  (sin prefijo!)
+      MEAS:STOP                  → detener            (sin prefijo!)
+      :SENS:COUN:DATA?           → "<conteo>;<estado>;<indice>"
+      :STAT:MEAS?                → registro de estado de la medición
+
+    Importante: el comando para arrancar/detener medición es MEAS:STAR /
+    MEAS:STOP **sin** los prefijos opcionales SENS:/COUN:. Con prefijos el
+    firmware responde -113 "Undefined header".
     """
+
+    USBTMC_INITIATE_CLEAR = 5
+    USBTMC_CHECK_CLEAR    = 6
+
     def __init__(self):
         self._dev:  usb.core.Device | None = None
         self._info: dict = {}
         self._lock = threading.Lock()
+        self._tag = 0
+        self._tmc_timeout_ms = 600
 
+    # ── Conexión ─────────────────────────────────────────────────────────────
     def conectar(self, info: dict):
         dev = info["dev"]
-        # En macOS no hay kernel driver que despegar normalmente, pero
-        # algunos sistemas sí lo requieren.
         try:
             if dev.is_kernel_driver_active(0):
                 dev.detach_kernel_driver(0)
@@ -460,21 +474,31 @@ class DriverSPCM:
         try:
             dev.set_configuration()
         except usb.core.USBError as e:
-            # En macOS a veces falla por permisos: el driver Thorlabs
-            # estándar no está cargado, pero la enumeración funciona.
             raise RuntimeError(
                 f"No se pudo configurar el dispositivo USB: {e}\n"
-                "En macOS, asegúrate de no tener el software Thorlabs "
-                "Windows abierto vía VM compartiendo el USB.")
+                "Cierra cualquier aplicación Thorlabs (incluso en otra VM) "
+                "que pueda tener tomado el SPCM50A.")
         try:
             usb.util.claim_interface(dev, 0)
         except usb.core.USBError as e:
             raise RuntimeError(f"No se pudo reservar la interface USB: {e}")
         self._dev  = dev
         self._info = info
+        # Limpieza inicial: USBTMC INITIATE_CLEAR + *CLS purgan colas y
+        # dejan el dispositivo en un estado conocido tras un reinicio.
+        self._tmc_clear()
+        try:
+            self._scpi_w("*CLS")
+        except Exception:
+            pass
 
     def desconectar(self):
         if self._dev is not None:
+            # Intentar parar cualquier medición activa antes de cerrar.
+            try:
+                self._scpi_w("MEAS:STOP")
+            except Exception:
+                pass
             try:
                 usb.util.release_interface(self._dev, 0)
             except Exception:
@@ -498,42 +522,181 @@ class DriverSPCM:
         prod = self._info.get("product", "SPCM50A")
         return f"{prod}  S/N: {sn}"
 
+    # ── USBTMC primitivas ────────────────────────────────────────────────────
+    def _next_tag(self) -> int:
+        self._tag = (self._tag % 255) + 1
+        return self._tag
+
+    def _tmc_clear(self):
+        """USBTMC INITIATE_CLEAR + CHECK_CLEAR_STATUS + clear_halt en EPs.
+        Recupera el dispositivo de un stall o de una transferencia abortada."""
+        if self._dev is None:
+            return
+        try:
+            self._dev.ctrl_transfer(
+                0xA1, self.USBTMC_INITIATE_CLEAR, 0, 0, 1, timeout=500)
+            for _ in range(8):
+                time.sleep(0.04)
+                s = self._dev.ctrl_transfer(
+                    0xA1, self.USBTMC_CHECK_CLEAR, 0, 0, 2, timeout=500)
+                if s and s[0] == 0x01:
+                    break
+        except Exception:
+            pass
+        for ep in (EP_BULK_OUT, EP_BULK_IN):
+            try:
+                self._dev.clear_halt(ep)
+            except Exception:
+                pass
+
+    def _scpi_w(self, cmd: str):
+        """Envía un comando SCPI (sin lectura) en formato USBTMC DEV_DEP_OUT."""
+        if self._dev is None:
+            raise RuntimeError("USB no conectado")
+        msg = cmd.encode("ascii")
+        tag = self._next_tag()
+        header = struct.pack(
+            "<BBBBIBxxx", 1, tag, (~tag) & 0xFF, 0, len(msg), 0x01)
+        pkt = header + msg
+        pad = (-len(pkt)) % 4
+        if pad:
+            pkt += b"\x00" * pad
+        try:
+            self._dev.write(EP_BULK_OUT, pkt, timeout=self._tmc_timeout_ms)
+        except usb.core.USBError:
+            self._tmc_clear()
+            raise
+
+    def _scpi_q(self, cmd: str, max_len: int = 1024) -> str:
+        """Envía un comando SCPI y lee la respuesta. Devuelve string sin
+        terminador."""
+        if self._dev is None:
+            raise RuntimeError("USB no conectado")
+        self._scpi_w(cmd)
+        # REQUEST_DEV_DEP_MSG_IN
+        tag = self._next_tag()
+        req = struct.pack(
+            "<BBBBIBxxx", 2, tag, (~tag) & 0xFF, 0, max_len, 0x00)
+        try:
+            self._dev.write(EP_BULK_OUT, req, timeout=self._tmc_timeout_ms)
+            chunk = bytes(self._dev.read(
+                EP_BULK_IN, max_len + 12, timeout=self._tmc_timeout_ms))
+        except usb.core.USBError:
+            self._tmc_clear()
+            raise
+        if len(chunk) < 12:
+            return chunk.decode("ascii", errors="replace").rstrip("\x00\r\n")
+        # Header: MsgID(1) bTag(1) bTagInverse(1) reserved(1) TransferSize(4) ...
+        transfer_size = struct.unpack("<I", chunk[4:8])[0]
+        return chunk[12:12 + transfer_size].decode(
+            "ascii", errors="replace").rstrip("\x00\r\n")
+
+    # ── SCPI helpers de alto nivel ───────────────────────────────────────────
+    def identificar(self) -> str:
+        try:
+            return self._scpi_q("*IDN?")
+        except Exception:
+            self._tmc_clear()
+            try:
+                return self._scpi_q("*IDN?")
+            except Exception as e:
+                return f"<{e}>"
+
+    def _configurar(self, bin_length_s: float, time_between_s: float,
+                    array_mode: bool):
+        """Configura modo, bin length, gap y modo array."""
+        # Modo 2 = free running timed counter (auto-recurrente).
+        self._scpi_w(":SENS:COUN:GATE:MODE 2")
+        self._scpi_w(f":SENS:COUN:GATE:APER {bin_length_s:.6f}")
+        self._scpi_w(f":SENS:COUN:GATE:DEL {time_between_s:.6f}")
+        self._scpi_w(":SENS:COUN:ARR:STAT 1" if array_mode else ":SENS:COUN:ARR:STAT 0")
+        # APD siempre activa (modo simple); gated solo si se usa external trig.
+        self._scpi_w(":SENS:COUN:APD:GATE 0")
+
     # ── Adquisición ──────────────────────────────────────────────────────────
     def leer_array(self, bin_length_ms: float, n_bins: int,
                    time_between_ms: float, pulse_blind_ns: float,
                    detener_event: threading.Event,
                    callback_progreso=None) -> np.ndarray:
         """
-        Adquiere un array de n_bins conteos del SPCM50A real.
+        Adquiere n_bins muestras (cuentas por bin) en modo continuo.
 
-        ⚠ IMPLEMENTAR según protocolo binario propietario del SPCM50A.
-        Firma del callback: callback_progreso(fraccion, partial_array_view).
-
-        Esquema típico:
-          - Enviar paquete CONFIG por EP_BULK_OUT (0x02) con bin_length,
-            n_bins, time_between, pulse_blind.
-          - Enviar START.
-          - Leer ráfagas del EP_BULK_IN (0x82): cada bin probablemente es
-            un entero little-endian 4 B; en lotes de 16 bins/paquete.
-          - Acumular y emitir partial_array por callback cada lote.
-          - Devolver np.ndarray de int64.
+        El SPCM50A en MODE=2 produce una muestra cada (APER + DEL) segundos
+        y cada `:SENS:COUN:DATA?` devuelve la última muestra disponible
+        junto con su índice. Polling secuencial nos da una serie de bins
+        en tiempo real.
         """
+        bin_s   = max(bin_length_ms,  0.001) / 1000.0
+        delay_s = max(time_between_ms, 0.001) / 1000.0
+        contadores = np.zeros(n_bins, dtype=np.int64)
+
         with self._lock:
-            raise NotImplementedError(
-                "Protocolo USB binario no implementado — la GUI usa el "
-                "simulador. Ver docstring de DriverSPCM.leer_array()."
-            )
+            try:
+                self._tmc_clear()
+                self._scpi_w("*CLS")
+                self._configurar(bin_s, delay_s, array_mode=False)
+                # Empezar la medición. MEAS:STAR es comando top-level
+                # (sin prefijos SENS:/COUN: — con ellos da -113).
+                self._scpi_w("MEAS:STAR")
+
+                prev_idx     = 0
+                i            = 0
+                update_every = max(1, n_bins // 50)
+                # Tiempo máximo para una muestra (4× el periodo del bin
+                # más 200 ms, con un mínimo de 600 ms).
+                tmo_ms = max(600, int((bin_s + delay_s) * 4 * 1000) + 200)
+                self._tmc_timeout_ms = tmo_ms
+
+                while i < n_bins and not detener_event.is_set():
+                    try:
+                        resp = self._scpi_q(":SENS:COUN:DATA?")
+                    except usb.core.USBError:
+                        # Reintentar tras stall
+                        time.sleep(0.05)
+                        continue
+                    partes = resp.split(";")
+                    if len(partes) != 3:
+                        continue
+                    try:
+                        cnt = int(partes[0]); idx = int(partes[2])
+                    except ValueError:
+                        continue
+                    if idx == 0 or idx == prev_idx:
+                        # Muestra aún no disponible — esperar < bin
+                        time.sleep(min(bin_s * 0.5, 0.05))
+                        continue
+                    contadores[i] = cnt
+                    i += 1
+                    prev_idx = idx
+                    if callback_progreso and (i % update_every == 0
+                                               or i == n_bins):
+                        callback_progreso(i / n_bins, contadores[:i])
+            finally:
+                try:
+                    self._scpi_w("MEAS:STOP")
+                except Exception:
+                    pass
+                self._tmc_timeout_ms = 600
+
+        # Si se detuvo antes de terminar, recortar para no devolver
+        # ceros artificiales detrás del corte.
+        if i < n_bins:
+            contadores = contadores[:i]
+        return contadores
 
     def leer_estado(self) -> dict:
-        """
-        Devuelve banderas de estado del hardware.
-        ⚠ IMPLEMENTAR. Por ahora devuelve todas en False.
-        """
+        """Decodifica el registro de estado de la medición (16 bits) según
+        sección 4.18 del manual SPCMxxA."""
+        try:
+            resp = self._scpi_q(":STAT:MEAS?")
+            estado = int(resp.strip())
+        except Exception:
+            estado = 0
         return {
-            "values_lost":     False,
-            "overtemperature": False,
-            "overflow":        False,
-            "saturation":      False,
+            "values_lost":     bool(estado & (1 << 4)),   # overload
+            "overtemperature": bool(estado & (1 << 5)),
+            "overflow":        bool(estado & (1 << 3)),
+            "saturation":      bool(((estado >> 6) & 0x3) == 0x3),
         }
 
 
@@ -684,7 +847,12 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(central); lay.setContentsMargins(4, 4, 4, 4)
         lay.setSpacing(4)
 
-        # Banner de estado del dispositivo (visible siempre)
+        # Banner de estado + botón de desconexión segura
+        banner_fila = QWidget()
+        banner_lay = QHBoxLayout(banner_fila)
+        banner_lay.setContentsMargins(0, 0, 0, 0)
+        banner_lay.setSpacing(6)
+
         self.banner = QLabel("Buscando dispositivo …")
         self.banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.banner.setStyleSheet(
@@ -692,7 +860,17 @@ class MainWindow(QMainWindow):
             f"border:1px solid {COL_BORDE};border-radius:3px;"
             "padding:6px;font-weight:bold;font-size:12px;"
             "letter-spacing:1px;")
-        lay.addWidget(self.banner)
+        banner_lay.addWidget(self.banner, 1)
+
+        self.btn_desconectar = QPushButton("⏏  Desconectar")
+        self.btn_desconectar.setStyleSheet(
+            f"background-color:{COL_ROJO};color:#1e1e2e;font-weight:bold;"
+            "font-size:11px;padding:6px 14px;min-width:120px;border-radius:3px;")
+        self.btn_desconectar.clicked.connect(self._toggle_conexion)
+        self.btn_desconectar.setEnabled(False)
+        banner_lay.addWidget(self.btn_desconectar)
+
+        lay.addWidget(banner_fila)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setHandleWidth(4)
@@ -728,8 +906,8 @@ class MainWindow(QMainWindow):
         mb = self.menuBar()
 
         m_file   = mb.addMenu("&File")
-        a_save   = QAction("Save data as CSV…", self)
-        a_save.triggered.connect(self._guardar_csv)
+        a_save   = QAction("Save data as TXT…", self)
+        a_save.triggered.connect(self._guardar_txt)
         a_quit   = QAction("Exit", self); a_quit.triggered.connect(self.close)
         m_file.addAction(a_save); m_file.addSeparator(); m_file.addAction(a_quit)
 
@@ -763,7 +941,7 @@ class MainWindow(QMainWindow):
         st = self.style()
 
         a = QAction(_icon(st, QStyle.StandardPixmap.SP_DialogSaveButton),
-                    "Save CSV", self); a.triggered.connect(self._guardar_csv)
+                    "Save TXT", self); a.triggered.connect(self._guardar_txt)
         tb.addAction(a)
         a = QAction(_icon(st, QStyle.StandardPixmap.SP_BrowserReload),
                     "Refresh", self); a.triggered.connect(self._auto_detectar)
@@ -850,6 +1028,15 @@ class MainWindow(QMainWindow):
             "font-size:13px;padding:8px;")
         self.btn_start.clicked.connect(self._iniciar_medicion)
         lay.addWidget(self.btn_start)
+
+        # ── Botón Stop (grande, activo solo durante medición) ──
+        self.btn_stop = QPushButton("■  Stop")
+        self.btn_stop.setStyleSheet(
+            "background-color:#8c3a3a;color:white;font-weight:bold;"
+            "font-size:13px;padding:8px;")
+        self.btn_stop.clicked.connect(self._detener_medicion)
+        self.btn_stop.setEnabled(False)
+        lay.addWidget(self.btn_stop)
 
         # ── Measurement Properties ──
         gb_mp = QGroupBox("Measurement Properties")
@@ -1057,18 +1244,15 @@ class MainWindow(QMainWindow):
             self.lbl_estado.setStyleSheet(
                 f"color:{COL_VERDE};font-weight:bold;")
             self.a_conectar.setText("Disconnect")
-            # Banner verde: dispositivo conectado pero protocolo aún no
-            # implementado → al iniciar adquisición caerá al simulador.
-            self.banner.setText(
-                f"●  DISPOSITIVO CONECTADO — {info}    "
-                f"·    Protocolo binario sin implementar: la adquisición "
-                f"usará el SIMULADOR (~50 cps dark counts)")
+            self.btn_desconectar.setEnabled(True)
+            self.banner.setText(f"●  DISPOSITIVO CONECTADO — {info}")
             self.banner.setStyleSheet(
-                f"background:{COL_BG2};color:{COL_AMBAR};"
-                f"border:2px solid {COL_AMBAR};border-radius:3px;"
+                f"background:{COL_BG2};color:{COL_VERDE};"
+                f"border:2px solid {COL_VERDE};border-radius:3px;"
                 "padding:6px;font-weight:bold;font-size:12px;"
                 "letter-spacing:1px;")
         else:
+            self.btn_desconectar.setEnabled(False)
             if self._simulacion:
                 self.lbl_estado.setText("● Modo simulación")
                 self.lbl_estado.setStyleSheet(
@@ -1161,6 +1345,7 @@ class MainWindow(QMainWindow):
         self._continuamente  = self.chk_cont.isChecked()
         self._evt_detener.clear()
         self.btn_start.setEnabled(False)
+        self.btn_stop.setEnabled(True)
         self._tb_start.setEnabled(False)
         self._tb_stop.setEnabled(True)
         self.bar_progreso.setValue(0)
@@ -1247,6 +1432,7 @@ class MainWindow(QMainWindow):
         self._evt_detener.set()
         self._midiendo = False
         self.btn_start.setEnabled(True)
+        self.btn_stop.setEnabled(False)
         self._tb_start.setEnabled(True)
         self._tb_stop.setEnabled(False)
         self._log("Medición detenida por usuario.")
@@ -1367,6 +1553,7 @@ class MainWindow(QMainWindow):
         if not self._continuamente:
             self._midiendo = False
             self.btn_start.setEnabled(True)
+            self.btn_stop.setEnabled(False)
             self._tb_start.setEnabled(True)
             self._tb_stop.setEnabled(False)
 
@@ -1456,24 +1643,23 @@ class MainWindow(QMainWindow):
     # ─────────────────────────────────────────────────────────────────────────
     # Exportar
     # ─────────────────────────────────────────────────────────────────────────
-    def _guardar_csv(self):
+    def _guardar_txt(self):
         if self._datos_actuales is None:
             QMessageBox.information(self, "No data",
                                     "No hay datos adquiridos para exportar.")
             return
         ruta, _ = QFileDialog.getSaveFileName(
-            self, "Save CSV",
-            f"spcm_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            "CSV (*.csv)")
+            self, "Save TXT",
+            f"spcm_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            "Text (*.txt)")
         if not ruta:
             return
         try:
-            with open(ruta, "w", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                w.writerow(["bin_number", "counts"])
+            with open(ruta, "w", encoding="utf-8") as f:
+                f.write("bin_number\tcounts\n")
                 for i, c in enumerate(self._datos_actuales, start=1):
-                    w.writerow([i, int(c)])
-            self._log(f"CSV guardado: {ruta}")
+                    f.write(f"{i}\t{int(c)}\n")
+            self._log(f"TXT guardado: {ruta}")
             QMessageBox.information(self, "Saved",
                                     f"Datos guardados en:\n{ruta}")
         except Exception as e:

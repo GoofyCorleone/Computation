@@ -13,13 +13,14 @@ para el contador de fotones **Thorlabs SPCM50A/M** (USB HID). Incluye:
 - **App macOS** (`dist/iBeamSmart.app`) — empaquetada con PyInstaller.
 
 **Thorlabs SPCM50A/M — Single Photon Counter**
-- **GUI** (`spcm_gui.py`) — aplicación PyQt6 con dos pestañas:
-  *Medición* (display digital de tasa de conteo, T integración, modo
-  continuo/única, umbral de alerta, estadísticas en vivo, gráfica P(t)) y
-  *Análisis* (histograma, traza 10 min, estadísticas globales, exportación CSV).
-- **App macOS** (`dist/SPCM50AM.app`) — empaquetada con PyInstaller.
-- **Modo simulación** automático si el dispositivo no está conectado
-  (distribución de Poisson + deriva lenta realista).
+- **GUI** (`spcm_gui.py`) — aplicación PyQt6 completa con tema oscuro Catppuccin Mocha.
+  Panel izquierdo: *Operating Mode + Settings + Start/Stop + Measurement Properties +
+  Occurrences*. Panel derecho: cuatro pestañas (*Alignment / Table / Graph / Bar*).
+  Adquisición en tiempo real vía USBTMC + SCPI (protocolo verificado en hardware
+  M00296614). Exportación a `.txt` (tabulado). Modo simulación Poisson automático
+  si no hay hardware.
+- **App macOS** (`dist/SPCM50AM.app`) — empaquetada con PyInstaller, incluye
+  `libusb-1.0.0.dylib` para uso sin Homebrew.
 
 | Pestaña Control | Pestaña FINE / SKILL |
 |---|---|
@@ -35,8 +36,9 @@ para el contador de fotones **Thorlabs SPCM50A/M** (USB HID). Incluye:
 - **Conexión automática**: al abrir la app se conecta en cuanto encuentra el
   láser — no hace falta pulsar nada.
 - **Control de canales**: cada canal (CH1, CH2) se configura en mW de forma
-  independiente; la salida del láser es la **suma** de los canales activos,
-  por lo que para que el control sea intuitivo conviene dejar un canal en 0.
+  independiente; la salida del láser es la **suma** de los canales activos.
+  Al conectar, la app **zeroa automáticamente CH2** si quedó con un valor de
+  sesiones anteriores, garantizando que CH1 controla la potencia linealmente.
 - **Telemetría en vivo**: polling cada 700 ms del estado (`ON`/`OFF`), la
   potencia real medida por el fotodiodo interno y la temperatura del diodo.
 - **Control y monitoreo de temperatura (TEC)**: muestra el setpoint del TEC,
@@ -360,20 +362,40 @@ Occurrences*, panel derecho con cuatro pestañas
 
 ### Modos de operación de la app
 
-La app distingue tres estados, indicados por un **banner de color** en la
+La app distingue dos estados, indicados por un **banner de color** en la
 parte superior de la ventana:
 
 | Banner | Significado | Datos mostrados |
 |--------|-------------|-----------------|
-| 🟢 verde *DISPOSITIVO CONECTADO* + (protocolo implementado) | SPCM50A real, leyendo bins por USB | Datos reales del Si APD |
-| 🟡 ámbar *DISPOSITIVO CONECTADO — protocolo sin implementar* | SPCM50A real detectado, pero el protocolo binario propietario de Thorlabs aún no está implementado | **Simulador** (~50 cps dark counts), no datos reales |
-| 🟣 lila *MODO SIMULACIÓN* | Sin dispositivo USB | Simulador (~50 cps dark counts) |
+| 🟢 verde *DISPOSITIVO CONECTADO* | SPCM50A real conectado, USBTMC+SCPI activo | Datos reales del Si APD |
+| 🟣 lila *MODO SIMULACIÓN* | Sin dispositivo USB | Simulador Poisson (~50 cps dark counts) |
 
-> ⚠ **Importante**: Mientras `DriverSPCM.leer_array()` no esté implementado,
-> el conteo en pantalla **siempre proviene del simulador** aunque el
-> dispositivo esté conectado. El simulador reproduce dark counts típicos
-> de un Si APD a temperatura ambiente (~50 cps con sensor cubierto),
-> que es lo que se espera al verificar el ruido electrónico del detector.
+Junto al banner aparece el **botón Desconectar** (rojo), que cierra la
+interfaz USB de forma segura (detiene cualquier medición activa, envía
+`MEAS:STOP` y libera los endpoints antes de soltar el dispositivo).
+
+### Protocolo USBTMC + SCPI (verificado en M00296614)
+
+El driver usa **USBTMC** (IEEE-488.2 sobre USB) sobre los endpoints bulk
+`0x02` (OUT) y `0x82` (IN). Los comandos SCPI siguen la sección 4 del
+manual *SPCMxxA Operation Manual* (Thorlabs, 2020):
+
+| Comando SCPI | Efecto |
+|---|---|
+| `:SENS:COUN:GATE:MODE 2` | Free running timed counter |
+| `:SENS:COUN:GATE:APER <s>` | Duración del bin en segundos |
+| `:SENS:COUN:GATE:DEL <s>` | Pausa entre bins |
+| `:SENS:COUN:ARR:STAT 0` | Modo continuo (polling) |
+| `:SENS:COUN:APD:GATE 0` | APD siempre activa |
+| `MEAS:STAR` | **Arrancar** medición (sin prefijo SENS:/COUN:) |
+| `MEAS:STOP` | **Detener** medición |
+| `:SENS:COUN:DATA?` | `"<conteo>;<estado>;<índice>"` |
+| `:STAT:MEAS?` | Registro de estado de 16 bits |
+
+> ⚠ `MEAS:STAR` / `MEAS:STOP` son comandos **top-level**: el firmware
+> devuelve error -113 si se usan con los prefijos `SENS:` o `COUN:`.
+
+Tasa verificada en hardware: **~2200 cps** (Si APD con láser atenuado a 5 mW).
 
 ### Vista en vivo
 
@@ -464,10 +486,18 @@ Banderas de estado: `Values lost`, `Overtemperature occured`,
 `Overflow occured`, `Saturation of APD`. Se ponen rojas si el dispositivo
 las dispara durante la medición.
 
+### Stop durante la adquisición
+
+Una vez iniciada la medición, el botón **■ Stop** (rojo oscuro, panel
+izquierdo) y el icono de la toolbar se activan. Pulsarlos detiene el
+polling inmediatamente, envía `MEAS:STOP` al dispositivo y guarda los
+bins ya adquiridos — no se pierde ningún dato previo.
+
 ### Exportación
 
-`File → Save data as CSV…` (o el botón de la toolbar) genera un CSV
-con columnas `bin_number, counts`.
+`File → Save data as TXT…` (o el botón de la toolbar) genera un archivo
+de texto tabulado con columnas `bin_number` y `counts`, separadas por
+tabulador, listo para abrir en Excel, Origin o NumPy (`np.loadtxt`).
 
 ### Información USB del dispositivo
 
@@ -482,24 +512,13 @@ Verificada en la unidad `M00296614`:
 | EP `0x82` IN  | bulk, 64 B (datos) |
 | EP `0x81` IN  | interrupt, 2 B (estado) |
 
-### Implementar el protocolo binario
+### Recuperación de errores USB
 
-`DriverSPCM.conectar()` ya configura la interfaz USB y reserva el
-endpoint. Falta capturar el protocolo binario propietario (los bytes
-exactos que el "Thorlabs Single Photon Counter GUI" envía/recibe).
-
-Pasos sugeridos:
-
-1. En Windows, instalar Wireshark + USBPcap.
-2. Mientras se ejecuta el software de Thorlabs, capturar la sesión.
-3. Identificar las secuencias de comando (setup, start, lectura).
-4. Reemplazar el cuerpo de `DriverSPCM.leer_array()` y
-   `DriverSPCM.leer_estado()` con las llamadas correspondientes a
-   `dev.write(EP_BULK_OUT, ...)` y `dev.read(EP_BULK_IN, ...)`.
-
-Mientras el protocolo no esté implementado, la GUI muestra el dispositivo
-**conectado** en la status bar pero usa el simulador para producir datos
-(la primera adquisición lo indica en el log).
+El driver implementa la secuencia USBTMC de recuperación automática tras
+cualquier `USBError`: `INITIATE_CLEAR` (control transfer 5) +
+`CHECK_CLEAR_STATUS` (control transfer 6) + `clear_halt` en ambos
+endpoints. Esto evita que un timeout bloquee el dispositivo para el resto
+de la sesión.
 
 ### Empaquetado como app macOS
 
