@@ -32,6 +32,30 @@ UMBRAL_REL_ESTABLE = 0.005
 MIN_MUESTRAS_EST   = 6
 TAU_DIODO_S        = 25.0
 
+# ── Longitud de onda estimada λ(T, P) ──────────────────────────────────────
+# El iBeam Smart de este laboratorio está especificado a 633 nm.  La línea
+# real se desplaza ligeramente con la temperatura del diodo y con la
+# corriente de inyección (autocalentamiento).  Coeficientes típicos para
+# diodos rojos (TOPTICA App. Note AN-007 — "Wavelength tuning of laser
+# diodes"):
+#       dλ/dT ≈ +0.06 nm/°C
+#       dλ/dP ≈ +0.005 nm/mW
+#
+#       λ(T, P) ≈ λ_0 + (dλ/dT)·(T − T_0) + (dλ/dP)·P
+#
+# RECOMENDACIÓN — configuración más cercana a 633 nm exactos:
+#   - TEC setpoint:  25.0 °C  (de fábrica; único accesible sin contraseña)
+#   - Potencia:      ≲ 5 mW en CH1, CH2 = 0   (minimiza autocalentamiento)
+#   - FINE:          Modo A   (reduce ruido sin mover la línea)
+#   - SKILL:         Apagado  (la modulación de fase ensancha la línea)
+# Con ese ajuste se obtiene λ ≈ 633.03 nm.  Si se opera a potencia más
+# alta y se quiere compensar el corrimiento por autocalentamiento, bajar
+# el TEC ~−0.08 °C por cada mW extra (requiere contraseña TOPTICA).
+LAMBDA_NOMINAL_NM    = 633.0
+T_CALIBRACION_C      = 25.0
+DLAMBDA_DT_NM_PER_C  = 0.06
+DLAMBDA_DP_NM_PER_MW = 0.005
+
 
 def enviar(ser: serial.Serial, comando: str) -> str:
     """Envía un comando y devuelve la respuesta sin prompt ni eco."""
@@ -80,6 +104,40 @@ def leer_setpoint_temp_C(ser: serial.Serial) -> float | None:
     return None
 
 
+def detectar_lambda_nominal(ser: serial.Serial) -> tuple[str, float]:
+    """Pregunta al firmware su versión y extrae la λ nominal en nm.
+    Cae a LAMBDA_NOMINAL_NM si no logra parsearla."""
+    for cmd in ("ver", "sh ver", "id", "sh syst"):
+        try:
+            resp = enviar(ser, cmd)
+        except Exception:
+            continue
+        for linea in resp.splitlines():
+            tokens = (linea.replace("-", " ").replace("/", " ")
+                          .replace(":", " ").split())
+            for tok in tokens:
+                d = "".join(c for c in tok if c.isdigit())
+                if d and 3 <= len(d) <= 4:
+                    try:
+                        v = int(d)
+                    except ValueError:
+                        continue
+                    if 350 <= v <= 1100:
+                        return (linea.strip(), float(v))
+    return ("(modelo no identificado)", LAMBDA_NOMINAL_NM)
+
+
+def estimar_lambda_nm(lam_nominal_nm: float,
+                      temp_C: float | None,
+                      potencia_mW: float | None) -> float:
+    lam = lam_nominal_nm
+    if temp_C is not None:
+        lam += DLAMBDA_DT_NM_PER_C * (temp_C - T_CALIBRACION_C)
+    if potencia_mW is not None:
+        lam += DLAMBDA_DP_NM_PER_MW * potencia_mW
+    return lam
+
+
 def estado_estabilidad(historial: deque) -> tuple[str, float | None]:
     """Devuelve (texto, eta_segundos) según el historial reciente."""
     n = len(historial)
@@ -120,7 +178,10 @@ def main():
         setpoint  = leer_setpoint_temp_C(laser)
         tec       = enviar(laser, "sta tec").strip()
         temp_ini  = leer_temperatura_C(laser)
+        modelo, lam_nominal = detectar_lambda_nominal(laser)
         print(f"Estado inicial    : {estado}")
+        print(f"Modelo / λ₀       : {modelo}  →  {lam_nominal:.0f} nm @ "
+              f"{T_CALIBRACION_C:.0f} °C")
         print(f"TEC               : {tec}, setpoint = {setpoint} °C, actual = {temp_ini} °C")
         print(f"Niveles           :\n{niveles}")
 
@@ -140,20 +201,22 @@ def main():
         print(f"Estado            : {estado}")
         print(f"Potencia inicial  : {potencia/1000:.3f} mW")
 
-        print("\nAdquiriendo potencia y temperatura durante 12 s ...")
-        tiempos, potencias, temperaturas = [], [], []
+        print("\nAdquiriendo potencia, temperatura y λ estimada durante 12 s ...")
+        tiempos, potencias, temperaturas, longitudes = [], [], [], []
         historial = deque()
         t0 = time.time()
-        ultima_temp = temp_ini if temp_ini is not None else 25.0
+        ultima_temp = temp_ini if temp_ini is not None else T_CALIBRACION_C
         while time.time() - t0 < 12.0:
             t = time.time() - t0
             p_mW = leer_potencia_uW(laser) / 1000.0
             temp = leer_temperatura_C(laser)
             if temp is not None:
                 ultima_temp = temp
+            lam = estimar_lambda_nm(lam_nominal, ultima_temp, p_mW)
             tiempos.append(t)
             potencias.append(p_mW)
             temperaturas.append(ultima_temp)
+            longitudes.append(lam)
             historial.append((t, p_mW))
             t_min = t - VENTANA_ESTAB_S
             while historial and historial[0][0] < t_min:
@@ -162,7 +225,7 @@ def main():
             eta_str = f"{eta:.0f} s" if eta is not None else "—"
             print(
                 f"  t={t:5.1f} s  P={p_mW:.3f} mW  T={ultima_temp:.2f} °C  "
-                f"[{est:14s}]  ETA: {eta_str}",
+                f"λ={lam:7.2f} nm  [{est:14s}]  ETA: {eta_str}",
                 end="\r",
             )
             time.sleep(0.25)
@@ -173,11 +236,11 @@ def main():
         estado_final = enviar(laser, "sta la")
         print(f"Estado final      : {estado_final}")
 
-    # Gráfico potencia + temperatura
-    fig, (ax1, ax2) = pl.subplots(2, 1, figsize=(8, 6), sharex=True)
+    # Gráfico potencia + temperatura + λ estimada
+    fig, (ax1, ax2, ax3) = pl.subplots(3, 1, figsize=(8, 8), sharex=True)
     ax1.plot(tiempos, potencias, "b.-", markersize=4)
     ax1.set_ylabel("Potencia [mW]")
-    ax1.set_title("iBeam Smart — potencia y temperatura durante emisión")
+    ax1.set_title(f"iBeam Smart {lam_nominal:.0f} nm — P, T y λ estimada")
     ax1.grid(True, alpha=0.3)
     ax1.axhline(potencia_mW, color="gray", linestyle="--", linewidth=0.8,
                 label=f"Setpoint {potencia_mW} mW")
@@ -185,12 +248,19 @@ def main():
 
     ax2.plot(tiempos, temperaturas, "r.-", markersize=4)
     ax2.set_ylabel("Temperatura [°C]")
-    ax2.set_xlabel("Tiempo [s]")
     if setpoint is not None:
         ax2.axhline(setpoint, color="gray", linestyle="--", linewidth=0.8,
                     label=f"Setpoint TEC {setpoint:.1f} °C")
         ax2.legend(loc="lower right")
     ax2.grid(True, alpha=0.3)
+
+    ax3.plot(tiempos, longitudes, color="#b48ead", marker=".", ms=4, lw=1.2)
+    ax3.axhline(LAMBDA_NOMINAL_NM, color="gray", linestyle="--", linewidth=0.8,
+                label=f"Objetivo {LAMBDA_NOMINAL_NM:.0f} nm")
+    ax3.set_ylabel("λ estimada [nm]")
+    ax3.set_xlabel("Tiempo [s]")
+    ax3.grid(True, alpha=0.3)
+    ax3.legend(loc="lower right")
     pl.tight_layout()
     pl.savefig("potencia_laser.png", dpi=120)
     print("\nGráfico guardado: potencia_laser.png")

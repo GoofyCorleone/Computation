@@ -52,6 +52,31 @@ MIN_MUESTRAS_EST   = 6
 TAU_DIODO_S        = 25.0
 TOL_TEMP_C         = 0.30
 
+# ── Longitud de onda estimada ───────────────────────────────────────────────
+# El iBeam Smart utilizado en el laboratorio está especificado a 633 nm.
+# Coeficientes de tuneo típicos para un diodo láser rojo (TOPTICA App. Note
+# AN-007, "Wavelength tuning of laser diodes"):
+#   dλ/dT ≈ +0.06 nm/°C   (tuneo térmico del TEC)
+#   dλ/dP ≈ +0.005 nm/mW  (autocalentamiento por corriente de inyección)
+#
+#   λ(T, P) ≈ λ_0 + (dλ/dT)·(T − T_0) + (dλ/dP)·P
+#
+# Con λ_0 = 633 nm a T_0 = 25 °C y P ≲ 1 mW.
+#
+# RECOMENDACIÓN — configuración más cercana a 633 nm exactos:
+#   - TEC setpoint:  25.0 °C  (de fábrica; único accesible sin contraseña)
+#   - Potencia:      ≲ 5 mW en CH1 y CH2 = 0  (minimiza autocalentamiento)
+#   - FINE:          Modo A   (reduce ruido sin desplazar la línea)
+#   - SKILL:         Apagado  (la modulación de fase ensancha la línea)
+# Con ese ajuste, λ ≈ 633.03 nm.  Si la potencia operativa es alta y se
+# quiere compensar el corrimiento por autocalentamiento, ajustar el TEC
+# unos −0.08 °C por cada mW extra de salida (requiere contraseña TOPTICA).
+LAMBDA_NOMINAL_NM      = 633.0
+T_CALIBRACION_C        = 25.0
+DLAMBDA_DT_NM_PER_C    = 0.06
+DLAMBDA_DP_NM_PER_MW   = 0.005
+LAMBDA_OBJETIVO_NM     = 633.0
+
 # ── Gráficas ────────────────────────────────────────────────────────────────
 VENTANA_PLOT_S      = 60.0      # Tab 1: ventana deslizante (segundos)
 VENTANA_LARGO_MIN   = 10.0      # Tab 2: historial de potencia (minutos)
@@ -188,6 +213,9 @@ class IBeamDriver:
     def __init__(self):
         self.ser: serial.Serial | None = None
         self._lock = threading.Lock()
+        # λ nominal del modelo, leída del firmware al conectar (None si falla).
+        self._lambda_nominal_nm: float | None = None
+        self._modelo_str: str = ""
 
     def conectar(self, puerto: str):
         self.ser = serial.Serial(puerto, BAUD, timeout=TIMEOUT)
@@ -281,6 +309,59 @@ class IBeamDriver:
     def set_temperatura_C(self, temp_C: float) -> str:
         return self.enviar(f"set temp {temp_C:.2f}")
 
+    # ── identificación / longitud de onda ────────────────────────────────────
+    def leer_modelo(self) -> tuple[str, float | None]:
+        """
+        Pregunta al firmware su identificación y extrae la longitud de onda
+        nominal en nm.  Devuelve (cadena_modelo, λ_nominal_nm).
+        Cae con elegancia a (cadena, None) si no logra parsear nada.
+        """
+        if self._lambda_nominal_nm is not None:
+            return (self._modelo_str, self._lambda_nominal_nm)
+        for cmd in ("ver", "sh ver", "id", "sh syst"):
+            try:
+                resp = self.enviar(cmd)
+            except Exception:
+                continue
+            for linea in resp.splitlines():
+                s = linea.strip()
+                if not s:
+                    continue
+                # Buscamos números entre 350 y 1100 nm (rango típico de
+                # diodos visibles/IR cercanos del iBeam Smart).
+                tokens = (s.replace("-", " ").replace("/", " ")
+                            .replace(":", " ").split())
+                for tok in tokens:
+                    digitos = "".join(c for c in tok if c.isdigit())
+                    if digitos and 3 <= len(digitos) <= 4:
+                        try:
+                            val = int(digitos)
+                        except ValueError:
+                            continue
+                        if 350 <= val <= 1100:
+                            self._modelo_str       = s
+                            self._lambda_nominal_nm = float(val)
+                            return (s, float(val))
+        # Fallback: λ nominal de fábrica del laboratorio.
+        self._modelo_str        = "(modelo no identificado por firmware)"
+        self._lambda_nominal_nm = LAMBDA_NOMINAL_NM
+        return (self._modelo_str, LAMBDA_NOMINAL_NM)
+
+    def estimar_lambda_nm(self, temp_C: float | None,
+                          potencia_mW: float | None) -> float | None:
+        """
+        λ(T, P) ≈ λ_0 + dλ/dT · (T − T_cal) + dλ/dP · P.
+        Devuelve None si no hay λ nominal identificada todavía.
+        """
+        if self._lambda_nominal_nm is None:
+            return None
+        lam = self._lambda_nominal_nm
+        if temp_C is not None:
+            lam += DLAMBDA_DT_NM_PER_C * (temp_C - T_CALIBRACION_C)
+        if potencia_mW is not None:
+            lam += DLAMBDA_DP_NM_PER_MW * potencia_mW
+        return lam
+
     # ── FINE ─────────────────────────────────────────────────────────────────
     def leer_estado_fine(self) -> str:
         """Devuelve 'ON' u 'OFF'."""
@@ -320,6 +401,8 @@ class MainWindow(QMainWindow):
     sig_estabilidad   = pyqtSignal(object)   # (texto, frac, eta)
     sig_setp_resp     = pyqtSignal(str, str)
     sig_fine_estado   = pyqtSignal(str)      # 'ON' / 'OFF'
+    sig_modelo        = pyqtSignal(str, object)  # (modelo_str, λ_nominal_nm | None)
+    sig_wavelength    = pyqtSignal(object)   # λ estimado en nm (None si N/A)
 
     def __init__(self):
         super().__init__()
@@ -478,6 +561,19 @@ class MainWindow(QMainWindow):
             lbl.setStyleSheet("font-weight:bold;font-size:13px;")
         fila_est.addWidget(self.lbl_estado); fila_est.addWidget(self.lbl_potencia)
         le.addLayout(fila_est)
+
+        # Longitud de onda estimada λ(T, P)
+        fila_lam = QHBoxLayout()
+        self.lbl_lambda = QLabel("Longitud de onda: —")
+        self.lbl_lambda.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_lambda.setStyleSheet(
+            "font-weight:bold;font-size:13px;color:#f9e2af;")  # amarillo Mocha
+        self.lbl_modelo = QLabel("Modelo: —")
+        self.lbl_modelo.setStyleSheet(
+            "font-size:11px;color:#a6adc8;font-family:Menlo;")
+        fila_lam.addWidget(self.lbl_lambda)
+        fila_lam.addWidget(self.lbl_modelo)
+        le.addLayout(fila_lam)
 
         fila_stab = QHBoxLayout()
         self.lbl_estab_pow = QLabel("Estabilidad: —")
@@ -673,6 +769,8 @@ class MainWindow(QMainWindow):
         self.sig_estabilidad.connect(self._on_estabilidad)
         self.sig_setp_resp.connect(self._on_setp_resp)
         self.sig_fine_estado.connect(self._on_fine_estado)
+        self.sig_modelo.connect(self._on_modelo)
+        self.sig_wavelength.connect(self._on_wavelength)
 
     # ──────────────────────────────────────────────────────────────────────────
     # Handlers de señales
@@ -776,6 +874,33 @@ class MainWindow(QMainWindow):
             self.sld_fine.blockSignals(True)
             self.sld_fine.setValue(0)
             self.sld_fine.blockSignals(False)
+
+    def _on_modelo(self, modelo: str, lam_nominal):
+        if lam_nominal is None:
+            self.lbl_modelo.setText("Modelo: —")
+        else:
+            self.lbl_modelo.setText(
+                f"Modelo: {modelo}  ·  λ₀ = {float(lam_nominal):.0f} nm @ "
+                f"{T_CALIBRACION_C:.0f} °C")
+
+    def _on_wavelength(self, lam):
+        if lam is None:
+            self.lbl_lambda.setText("Longitud de onda: —")
+            return
+        delta = float(lam) - LAMBDA_OBJETIVO_NM
+        # Verde si está a < 0.1 nm de 633; ámbar < 0.5 nm; rosa fuera.
+        if abs(delta) < 0.1:
+            color = "#a6e3a1"
+        elif abs(delta) < 0.5:
+            color = "#f9e2af"
+        else:
+            color = "#f38ba8"
+        signo = "+" if delta >= 0 else "−"
+        self.lbl_lambda.setText(
+            f"Longitud de onda: <span style='color:{color}'>"
+            f"{float(lam):.2f} nm</span> "
+            f"<span style='color:#a6adc8;font-weight:normal;font-size:11px;'>"
+            f"(Δ = {signo}{abs(delta):.2f} nm vs 633 nm)</span>")
 
     def _on_fine_slider(self, valor: int):
         modo = {0: "off", 1: "a", 2: "b"}[valor]
@@ -985,11 +1110,23 @@ class MainWindow(QMainWindow):
         temp     = self.driver.leer_temperatura_C()
         tec      = self.driver.leer_estado_tec()
         fine     = self.driver.leer_estado_fine()
+        modelo, lam_nom = self.driver.leer_modelo()
         self.sig_niveles.emit(niveles)
         self.sig_niveles_spin.emit(niveles)
         self.sig_temperatura.emit((temp, setpoint, tec))
         self.sig_fine_estado.emit(fine)
+        self.sig_modelo.emit(modelo, lam_nom)
+        # Estimación inicial de λ con la potencia configurada (sin emisión aún)
+        try:
+            p_total_mW = sum(niveles.values()) if niveles else 0.0
+        except Exception:
+            p_total_mW = 0.0
+        lam_est = self.driver.estimar_lambda_nm(temp, p_total_mW)
+        self.sig_wavelength.emit(lam_est)
         self.sig_log.emit(f"Niveles: {niveles}  TEC: {tec} {setpoint}°C  FINE: {fine}")
+        if lam_nom is not None:
+            self.sig_log.emit(
+                f"Modelo detectado: {modelo}  →  λ₀ = {float(lam_nom):.0f} nm")
 
     def _desconectar(self):
         self.timer_poll.stop()
@@ -1009,6 +1146,8 @@ class MainWindow(QMainWindow):
         self.bar_estab.setValue(0)
         for lbl in self.lbl_nivel.values():
             lbl.setText("—")
+        self.lbl_lambda.setText("Longitud de onda: —")
+        self.lbl_modelo.setText("Modelo: —")
         self.lbl_fine_estado.setText("Estado FINE: —")
         self.lbl_skill_estado.setText("Estado SKILL: Apagado")
         self.sld_fine.blockSignals(True); self.sld_fine.setValue(0); self.sld_fine.blockSignals(False)
@@ -1074,11 +1213,18 @@ class MainWindow(QMainWindow):
                 temp     = self.driver.leer_temperatura_C()
                 tec      = self.driver.leer_estado_tec()
                 fine     = self.driver.leer_estado_fine()
+                # Si el láser está emitiendo usamos la potencia medida
+                # (autocalentamiento real); si no, los setpoints sumados.
+                p_mW_real = potencia / 1000.0
+                if p_mW_real <= 0.0 and niveles:
+                    p_mW_real = sum(niveles.values())
+                lam_est = self.driver.estimar_lambda_nm(temp, p_mW_real)
                 self.sig_estado.emit(estado)
                 self.sig_potencia.emit(potencia)
                 self.sig_niveles.emit(niveles)
                 self.sig_temperatura.emit((temp, self.spn_temp.value(), tec))
                 self.sig_fine_estado.emit(fine)
+                self.sig_wavelength.emit(lam_est)
             except Exception as e:
                 self.sig_error_poll.emit(str(e))
         threading.Thread(target=_t, daemon=True).start()

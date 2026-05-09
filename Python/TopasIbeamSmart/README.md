@@ -41,6 +41,12 @@ para el contador de fotones **Thorlabs SPCM50A/M** (USB HID). Incluye:
   sesiones anteriores, garantizando que CH1 controla la potencia linealmente.
 - **Telemetría en vivo**: polling cada 700 ms del estado (`ON`/`OFF`), la
   potencia real medida por el fotodiodo interno y la temperatura del diodo.
+- **Longitud de onda estimada en tiempo real**: la app detecta la λ nominal
+  del modelo (vía `ver` / `sh syst`) y aplica el modelo de tuneo
+  `λ(T, P) = λ₀ + (dλ/dT)(T − 25 °C) + (dλ/dP)·P` con
+  `dλ/dT ≈ +0.06 nm/°C` y `dλ/dP ≈ +0.005 nm/mW`.  El valor se actualiza
+  cada ciclo de polling y se colorea según la cercanía a 633 nm
+  (verde < 0.1 nm, ámbar < 0.5 nm, rosa fuera).
 - **Control y monitoreo de temperatura (TEC)**: muestra el setpoint del TEC,
   la temperatura medida y un indicador de estabilidad térmica
   (|T − setpoint| < 0.3 °C). El campo de setpoint permite intentar fijar
@@ -122,6 +128,7 @@ Salida típica:
 ```
 Conectando a iBeam Smart en /dev/cu.usbserial-1140 a 115200 baud ...
 Estado inicial    : OFF
+Modelo / λ₀       : iBeam-SMART-633-S-HP  →  633 nm @ 25 °C
 TEC               : ON, setpoint = 25.0 °C, actual = 25.0 °C
 Niveles           :
 CH1, PWR:  2.000 mW
@@ -132,8 +139,8 @@ Encendiendo láser ...
 Estado            : ON
 Potencia inicial  : 4.987 mW
 
-Adquiriendo potencia y temperatura durante 12 s ...
-  t=11.8 s  P=5.001 mW  T=25.00 °C  [ESTABLE       ]  ETA: 0 s
+Adquiriendo potencia, temperatura y λ estimada durante 12 s ...
+  t=11.8 s  P=5.001 mW  T=25.00 °C  λ= 633.03 nm  [ESTABLE       ]  ETA: 0 s
 
 Apagando láser ...
 Estado final      : OFF
@@ -252,6 +259,42 @@ los parámetros de potencia) no puede modificarse sin contraseña de
 mantenimiento de TOPTICA. Aun así, la lectura, el monitoreo y el
 indicador de estabilidad térmica funcionan siempre.
 
+### Longitud de onda estimada λ(T, P)
+
+El iBeam Smart de este laboratorio está especificado a **633 nm**.  La
+longitud de onda real se desplaza ligeramente con la **temperatura del
+diodo** y con la **potencia óptica** (autocalentamiento por la corriente
+de inyección).  Coeficientes típicos para diodos rojos *single-mode*
+(TOPTICA App. Note AN-007 — *Wavelength tuning of laser diodes*):
+
+| Coeficiente            | Valor               |
+|------------------------|---------------------|
+| `dλ/dT`                | ≈ +0.06 nm/°C       |
+| `dλ/dP`                | ≈ +0.005 nm/mW      |
+| λ₀ (a 25 °C, ≲1 mW)    | 633 nm (este equipo)|
+
+con la fórmula
+
+  `λ(T, P) ≈ λ₀ + (dλ/dT)·(T − 25 °C) + (dλ/dP)·P`
+
+Esta estimación aparece en la pestaña *Control* en tiempo real, debajo
+de la potencia medida.
+
+#### Recomendación — configuración más cercana a 633 nm
+
+| Parámetro      | Valor recomendado                        |
+|----------------|------------------------------------------|
+| TEC setpoint   | **25.0 °C** (de fábrica, único accesible sin contraseña) |
+| Potencia       | **≲ 5 mW** en CH1 con CH2 = 0 (minimiza autocalentamiento) |
+| FINE           | **Modo A** (reduce ruido sin desplazar la línea) |
+| SKILL          | **Apagado** (la modulación de fase ensancha la línea) |
+
+Con esos ajustes se obtiene **λ ≈ 633.03 nm**.  Si se necesita operar a
+potencia más alta y compensar el corrimiento por autocalentamiento,
+habría que bajar el setpoint del TEC unos −0.08 °C por cada mW extra de
+potencia óptica — pero esto requiere contraseña de mantenimiento de
+TOPTICA.
+
 ### Cómo se calcula el ETA de estabilización
 
 Cada lectura de potencia (~1 s) se añade a una ventana móvil de 8 s. Sobre
@@ -324,6 +367,7 @@ El ejecutable queda en `dist\iBeamSmart.exe`.
 | `skill on` / `skill off` | Activar / desactivar SKILL               |
 | `skill 1` / `skill 2`   | Seleccionar modo 1 o 2 de SKILL           |
 | `sh ch`             | Estado detallado de canales                    |
+| `ver` / `sh ver` / `id` | Versión de firmware / modelo (incluye λ nominal) |
 
 † No siempre silencia la contribución; usar `ch N pow 0` para garantizar que
 un canal no contribuye a la salida.
@@ -343,7 +387,12 @@ TopasIbeamSmart/
 ├── docs/img/
 │   ├── gui_tab1.png         # Captura pestaña Control (láser)
 │   ├── gui_tab2.png         # Captura pestaña FINE / SKILL (láser)
-│   └── potencia_laser.png   # Última ejecución del script CLI
+│   ├── potencia_laser.png   # Última ejecución del script CLI
+│   ├── spcm_alignment.png   # Pestaña Alignment del SPCM (live view)
+│   ├── spcm_graph.png       # Pestaña Graph (counts vs bin)
+│   ├── spcm_bar.png         # Pestaña Bar (bins agrupados)
+│   ├── spcm_hist.png        # Distribución Poisson de cuentas/bin
+│   └── _generar_spcm_figs.py # Genera las cuatro figuras anteriores
 ├── potencia_laser.png       # Última ejecución del script CLI
 └── README.md
 ```
@@ -359,6 +408,28 @@ logo THORLABS, banner superior con el estado de conexión, panel izquierdo
 con *Operating Mode + Settings + Start + Measurement Properties +
 Occurrences*, panel derecho con cuatro pestañas
 (*Alignment / Table / Graph / Bar*) y status bar con número de serie.
+
+### Vista previa de las pestañas
+
+Figuras de ejemplo generadas con `docs/img/_generar_spcm_figs.py`
+(estadística Poisson realista, ~2200 cps, 1 ms/bin):
+
+| Pestaña Alignment — tasa CPS vs tiempo (live view 60 s) |
+|---|
+| ![Alignment](docs/img/spcm_alignment.png) |
+
+| Pestaña Graph — counts por bin | Pestaña Bar — bins agrupados |
+|---|---|
+| ![Graph](docs/img/spcm_graph.png) | ![Bar](docs/img/spcm_bar.png) |
+
+| Distribución de cuentas/bin (estadística Poisson, λ ≈ 2.2) |
+|---|
+| ![Histograma Poisson](docs/img/spcm_hist.png) |
+
+> Las figuras anteriores se generan localmente desde la app (ver
+> `docs/img/_generar_spcm_figs.py`); reflejan el formato y la paleta
+> que produce la GUI con datos sintéticos del simulador Poisson y son
+> consistentes con los datos reales adquiridos en M00296614 (~2200 cps).
 
 ### Modos de operación de la app
 
