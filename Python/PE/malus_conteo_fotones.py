@@ -375,7 +375,9 @@ class MainWindow(QMainWindow):
         gb_cfg = QGroupBox("Configuración del experimento")
         gc = QFormLayout(gb_cfg); gc.setSpacing(4)
         self.spn_potencia = QDoubleSpinBox()
-        self.spn_potencia.setRange(0.1, 30.0); self.spn_potencia.setDecimals(2)
+        # Rango ampliado al máximo del iBeam Smart 488 nm (≈ 100 mW)
+        self.spn_potencia.setRange(0.1, 100.0); self.spn_potencia.setDecimals(2)
+        self.spn_potencia.setSingleStep(1.0)
         self.spn_potencia.setValue(DEFAULT_POTENCIA_MW); self.spn_potencia.setSuffix(" mW")
         # Parámetros SPCM50A/M idénticos al software de Thorlabs.
         self.spn_bin_ms = QDoubleSpinBox()
@@ -428,6 +430,20 @@ class MainWindow(QMainWindow):
         self.btn_tomar.clicked.connect(self._tomar_punto)
         self.btn_tomar.setEnabled(False)
         gctrl.addWidget(self.btn_tomar)
+
+        # Repetir el último ángulo medido (descarta el punto previo y vuelve
+        # a medir en el mismo θ — útil cuando una toma sale ruidosa).
+        self.btn_repetir = QPushButton("↻  Repetir punto anterior")
+        self.btn_repetir.setStyleSheet(
+            "background-color:#3a8c8c;color:white;font-weight:bold;"
+            "font-size:12px;padding:8px;")
+        self.btn_repetir.setToolTip(
+            "Descarta el último punto tomado y vuelve a medir en el mismo "
+            "ángulo (útil si la lectura quedó ruidosa o si se reposicionó "
+            "el polarizador con más precisión).")
+        self.btn_repetir.clicked.connect(self._repetir_punto_anterior)
+        self.btn_repetir.setEnabled(False)
+        gctrl.addWidget(self.btn_repetir)
 
         self.btn_guardar = QPushButton("💾  Cerrar y guardar")
         self.btn_guardar.setStyleSheet(
@@ -711,6 +727,7 @@ class MainWindow(QMainWindow):
         ambos_ok = self._laser is not None and self._spcm is not None
         self.btn_iniciar.setEnabled(ambos_ok)
         self.btn_tomar.setEnabled(False)
+        self.btn_repetir.setEnabled(False)
         self.btn_guardar.setEnabled(False)
 
         # Banner
@@ -770,6 +787,7 @@ class MainWindow(QMainWindow):
         self.btn_desconectar.setEnabled(False)
         self.btn_iniciar.setEnabled(False)
         self.btn_tomar.setEnabled(False)
+        self.btn_repetir.setEnabled(False)
         self.banner.setText("○  DESCONECTADO")
         self.banner.setStyleSheet(
             f"background:{COL_BG2};color:{COL_TXT_DIM};"
@@ -850,6 +868,7 @@ class MainWindow(QMainWindow):
             f"  Calibración PIC → factor = {factor:.4f}  "
             f"(PIC bruto = {pic_uW:.1f} µW, setpoint = {pot_mW*1000:.0f} µW)")
         self.btn_tomar.setEnabled(True)
+        self.btn_repetir.setEnabled(len(self._puntos) > 0)
         self.banner.setText(
             f"●  MIDIENDO — láser ON @ {pot_mW:.2f} mW  "
             f"(factor PIC ×{factor:.3f})  ·  Pulsa “Tomar punto” para cada ángulo")
@@ -881,6 +900,45 @@ class MainWindow(QMainWindow):
             return
         self._iniciar_punto(ang)
 
+    def _repetir_punto_anterior(self):
+        """
+        Descarta el último punto guardado y vuelve a medir en el mismo
+        ángulo. Útil cuando la última toma quedó ruidosa, hubo deriva del
+        láser, o se reposicionó el polarizador con más precisión.
+        """
+        if not self._iniciado:
+            QMessageBox.warning(self, "No iniciado",
+                                "Pulsa primero “Iniciar medición”.")
+            return
+        if self._punto_en_curso:
+            return
+        if not self._puntos:
+            QMessageBox.information(
+                self, "Sin puntos previos",
+                "Aún no se ha tomado ningún punto que repetir.")
+            return
+
+        ult = self._puntos[-1]
+        ang_prev = float(ult["angulo"])
+        I_prev   = float(ult["I_norm"])
+
+        resp = QMessageBox.question(
+            self, "Repetir punto anterior",
+            f"Se descartará la última medición:\n\n"
+            f"    θ = {ang_prev:.1f}°    I_norm = {I_prev:.4g}\n\n"
+            f"¿Volver a medir en θ = {ang_prev:.1f}°?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes)
+        if resp != QMessageBox.StandardButton.Yes:
+            return
+
+        self._puntos.pop()
+        self._refrescar_resumen()
+        self._refrescar_malus()
+        self._log(f"Repitiendo punto en θ = {ang_prev:.1f}° "
+                  f"(descartado I_norm previo = {I_prev:.4g})")
+        self._iniciar_punto(ang_prev)
+
     def _iniciar_punto(self, angulo: float):
         bin_ms       = self.spn_bin_ms.value()
         time_btw_ms  = self.spn_time_between.value()
@@ -904,6 +962,7 @@ class MainWindow(QMainWindow):
         self.canvas_pot.draw_idle(); self.canvas_cps.draw_idle()
 
         self.btn_tomar.setEnabled(False)
+        self.btn_repetir.setEnabled(False)
         self._log(
             f"θ={angulo:6.1f}°  →  {n_bins} bins × {bin_ms:.3f} ms "
             f"(gap {time_btw_ms:.3f} ms, blind {pulse_blind:.3f} ns) "
@@ -1033,6 +1092,7 @@ class MainWindow(QMainWindow):
         self._punto_arr = None
         self._punto_potencias = []
         self.btn_tomar.setEnabled(True)
+        self.btn_repetir.setEnabled(len(self._puntos) > 0)
 
         if angulo >= 360.0 - 1e-6:
             self.btn_guardar.setEnabled(True)
@@ -1281,6 +1341,7 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Error", msg)
         self._punto_en_curso = False
         self.btn_tomar.setEnabled(self._iniciado)
+        self.btn_repetir.setEnabled(self._iniciado and len(self._puntos) > 0)
 
     # ─── Cierre seguro ─────────────────────────────────────────────────
     def closeEvent(self, event):

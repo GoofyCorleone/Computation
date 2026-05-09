@@ -233,14 +233,19 @@ Para desconectar de forma segura (apaga el láser y libera USB) usa el botón **
 
 En el panel **"Configuración del experimento"** ajusta los parámetros antes de comenzar:
 
-| Campo | Descripción | Valor típico |
-|---|---|---|
-| Potencia láser CH1 | Potencia de salida del iBeam Smart | 5 mW |
-| Bin Length | Duración de cada ventana temporal de conteo | 1 ms |
-| Time between Bins | Pausa entre bins | 0.001 ms |
-| Pulse Blind Time | Tiempo de ceguera del APD tras detección | 0 ns |
-| Bins per Array | Número de bins por punto angular | 10 000 |
-| Paso angular sugerido | Incremento sugerido al pedir el siguiente ángulo | 10° |
+| Campo | Descripción | Rango | Valor típico |
+|---|---|---|---|
+| Potencia láser CH1 | Potencia de salida del iBeam Smart | 0.1 – **100 mW** | 5 mW |
+| Bin Length | Duración de cada ventana temporal de conteo | 0.001 – 60 000 ms | 1 ms |
+| Time between Bins | Pausa entre bins | 0 – 60 000 ms | 0.001 ms |
+| Pulse Blind Time | Tiempo de ceguera del APD tras detección | 0 – 1 000 ns | 0 ns |
+| Bins per Array | Número de bins por punto angular | 1 – 10 000 000 | 10 000 |
+| Paso angular sugerido | Incremento sugerido al pedir el siguiente ángulo | 1° – 90° | 10° |
+
+> ⚠ **Cuidado con potencias altas (> 30 mW):** verifica que el APD del SPCM no
+> sature. La tasa máxima recomendada del SPCM50A/M es ~10 Mcps; usa filtros
+> neutros (NDF) si la señal saturada es persistente. La potencia máxima del
+> iBeam Smart 488 nm es 100 mW.
 
 El **tiempo estimado por punto** se calcula automáticamente:
 ```
@@ -333,6 +338,21 @@ Repite "Tomar punto" para cada ángulo de 0° a 360°. La curva acumulada se act
 - **Puntos azules con barras de error** — datos experimentales normalizados
 
 Cuando llegues a 360° el botón **"💾 Cerrar y guardar"** se habilita.
+
+#### 4. Repetir el punto anterior
+
+Si la última toma quedó ruidosa, se reposicionó el polarizador con más
+precisión, o hubo deriva del láser durante la medición, pulsa
+**"↻ Repetir punto anterior"**. La aplicación:
+
+1. Muestra el ángulo y la I_norm del último punto guardado.
+2. Pide confirmación.
+3. Si aceptas, descarta esa medición de la lista y la curva, e
+   inmediatamente arranca una nueva toma en el mismo θ.
+
+El botón solo se habilita cuando hay al menos un punto previo y no hay
+ninguna medición en curso. La lista de ángulos no avanza — el
+"siguiente ángulo sugerido" sigue siendo el mismo.
 
 **Opciones adicionales:**
 
