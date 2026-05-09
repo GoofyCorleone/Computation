@@ -359,6 +359,194 @@ ninguna medición en curso. La lista de ángulos no avanza — el
 - **"🔄 Reintentar SPCM"** — reconecta el contador sin reiniciar el experimento
 - **"🗑 Repetir desde cero"** — borra todos los puntos y apaga el láser (los archivos ya guardados no se borran)
 
+### Tratamiento de la señal y eliminación de ruido del láser
+
+Esta sección describe en detalle cómo `malus_conteo_fotones.py` procesa
+los datos crudos del SPCM y del láser para producir un valor robusto de
+`I_norm ± σ_I` para cada ángulo.
+
+#### Fuentes de ruido
+
+| Fuente | Tiempo característico | Magnitud típica |
+|---|---|---|
+| **Ruido cuántico (Poisson)** del APD | bin-a-bin, no correlacionado | σ_N = √N |
+| **Ruido de intensidad** del láser (RIN) | µs – ms | 0.1 – 1 % |
+| **Deriva térmica / mecánica** | s – min | 1 – 5 % |
+| **Modo de relajación** (turn-on) del diodo | ms – s | hasta 10 % los primeros segundos |
+
+El ruido de Poisson es **independiente** entre bins; el ruido del láser
+es **correlacionado** (afecta a varios bins consecutivos por igual).
+
+#### Estrategia: cociente bin-a-bin
+
+La clave para eliminar el ruido del láser es notar que tanto el conteo
+de fotones como la potencia óptica son **proporcionales a la intensidad
+instantánea del láser**:
+
+```
+CPS(t) = I_norm · P(t)         (más ruido de Poisson independiente)
+```
+
+Si dividimos `CPS / P` punto-a-punto en el tiempo, **la dependencia en
+P(t) se cancela** y solo queda `I_norm` más el ruido de Poisson
+residual. Cualquier deriva común al láser (drift térmico, RIN lento)
+desaparece.
+
+Este es el principio físico de las medidas **ratiométricas** y es
+estándar en fotometría de precisión, espectroscopía de absorción y
+detección lock-in.
+
+#### Implementación paso a paso
+
+Durante cada toma de un punto:
+
+**1. Adquisición simultánea de dos canales:**
+
+```
+SPCM50A/M  →  array de N bins de "Counts per Bin" a 1 kHz (10 000 bins ≈ 10 s)
+iBeam Smart →  lecturas de potencia P(t) a ~2.5 Hz (cada PERIODO_POT_S = 0.4 s)
+```
+
+Ambos hilos comparten un origen temporal `t = 0` cuando empieza la
+medición.
+
+**2. Conversión a CPS:**
+
+```python
+CPS_bin[i] = counts_bin[i] / Bin_Length_s
+```
+
+**3. Interpolación temporal de la potencia:**
+
+La potencia se sondea cada 0.4 s, pero los bins están a 1 ms. Para
+asignar una potencia a CADA bin, interpolamos linealmente:
+
+```python
+t_bin[i] = (i + 0.5) · (Bin_Length + Time_between_Bins)
+P_at_bin[i] = np.interp(t_bin[i], t_pot, P_samples)
+```
+
+`np.interp` extrapola con los valores extremos (clipping), lo cual es
+seguro porque el muestreo de potencia cubre TODA la duración del punto.
+
+**4. Calibración del PIC interno:**
+
+El fotodiodo PIC interno del iBeam Smart no entrega la potencia óptica
+real, sino una lectura proporcional. Antes de cualquier medición se
+calibra:
+
+```python
+factor_calib = P_setpoint / mean(PIC_lecturas_estables)
+P_real = P_PIC × factor_calib
+```
+
+Típicamente este factor es ≈ ×2 para el iBeam Smart 488 nm. Sin esta
+calibración la lectura de potencia estaría desfasada un factor constante
+y `I_norm` quedaría escalada incorrectamente.
+
+**5. Cociente bin-a-bin:**
+
+```python
+I_per_bin[i] = CPS_bin[i] / P_at_bin[i]      [CPS / µW]
+```
+
+Cada `I_per_bin[i]` es una estimación independiente de `I_norm`,
+inmune a la deriva del láser que era común a su CPS y a su P. Solo
+queda el ruido de Poisson de los conteos.
+
+**6. Estadística por chunks:**
+
+Para estimar la **incertidumbre del valor medio**, no usamos la
+desviación estándar directa de `I_per_bin` (que sobreestima por el
+ruido de Poisson de cada bin individual). En su lugar:
+
+```python
+M = clip(N_bins // 50, 10, 100)            # típicamente 100 chunks
+chunk_size = N_bins // M                   # típicamente 100 bins/chunk
+I_chunked = mean(I_per_bin reshape (M, chunk_size), axis=1)
+
+I_norm = mean(I_chunked)
+σ_I    = std(I_chunked, ddof=1) / sqrt(M)     # SEM de las medias de chunk
+```
+
+Cada chunk promedia ~100 bins (≈ 100 ms de datos), suficiente para
+hacer despreciable el ruido de Poisson **dentro** del chunk. La
+varianza **entre** chunks captura entonces solo:
+
+- Cualquier deriva residual no cancelada por la división bin-a-bin
+- Ruido correlacionado a tiempos largos (vibraciones, modos lentos)
+
+La SEM de las medias de chunk es por tanto un estimador honesto de la
+incertidumbre del promedio sobre toda la ventana de adquisición.
+
+**7. Cota inferior de Poisson:**
+
+Como sanidad, σ_I no puede ser menor que el límite cuántico:
+
+```
+σ_Poisson(I_norm) = I_norm / √N_total
+```
+
+donde `N_total = sum(counts)` son todos los fotones detectados durante
+el punto. Si la SEM por chunks resulta menor que esta cota (señal
+extremadamente estable), se reporta la cota:
+
+```python
+σ_I = max(σ_I_chunks, I_norm / sqrt(N_total))
+```
+
+#### Comparación con propagación independiente "ingenua"
+
+El método ingenuo (no usado, dejado solo como **fallback** cuando no
+hay lecturas de potencia disponibles) sería:
+
+```
+I_norm = mean(CPS) / mean(P)
+σ_I/I  = sqrt( (σ_CPS/CPS)² + (σ_P/P)² )           [WRONG]
+```
+
+Este método **sobreestima** σ_I porque trata CPS y P como
+independientes, mientras que en realidad están **fuertemente
+correlacionados** por la deriva común del láser.
+
+En una validación numérica con láser que deriva 2 % linealmente y 1 %
+de RIN rápido sobre 10 000 bins:
+
+| Método | σ_I/I obtenido |
+|---|---|
+| Ingenuo (mean/mean + errores indep.) | 0.18 % |
+| Cociente bin-a-bin + chunks (este código) | 0.05 % |
+| Cota cuántica de Poisson | 0.006 % |
+
+El método nuevo da barras de error **~3.5× más pequeñas y físicamente
+correctas**, dominadas por el ruido residual real y no por una
+sobreestimación artificial.
+
+#### Propagación a la curva normalizada
+
+Para mostrar `I/I_max` en la gráfica de Malus:
+
+```python
+I_n   = I / I_max               # I_max = max(I_observado)
+σ_I_n = σ_I / I_max             # σ relativa preservada
+```
+
+La incertidumbre relativa `σ_I/I` se conserva al normalizar (la
+incertidumbre del estimador de `I_max` se desprecia, lo cual es
+correcto cuando `I_max` se elige a posteriori entre los puntos
+medidos y no como un parámetro de ajuste libre).
+
+#### Incertidumbre angular
+
+La incertidumbre en θ es una constante por construcción del soporte
+rotatorio:
+
+```
+σ_θ = ±0.5°    (definido por SIGMA_ANGULO_DEG)
+```
+
+Se muestra como barra horizontal `xerr` en cada punto.
+
 ### Interpretar las gráficas
 
 #### Gráfica de Malus

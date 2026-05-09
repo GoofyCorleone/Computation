@@ -1039,27 +1039,81 @@ class MainWindow(QMainWindow):
             self._on_error("punto sin bins recibidos del SPCM")
             return
 
+        # ── Tratamiento de la señal ────────────────────────────────────
+        #
+        # 1) Counts → CPS por bin
+        # 2) Potencia P(t) → interpolada en el tiempo de cada bin
+        # 3) Cociente bin-a-bin   I_bin = CPS_bin / P(t_bin)
+        #    Esto CANCELA el ruido común del láser (deriva, modos
+        #    relajación) que afecta por igual a CPS y a P.
+        # 4) La media de los bins se agrupa en M chunks (≈ 50) y la
+        #    incertidumbre de I_norm se calcula como la SEM de las
+        #    medias de chunk. Esto incluye la varianza residual
+        #    (no-cancelada bin-a-bin) y los efectos correlacionados
+        #    a tiempos largos (deriva térmica, vibraciones).
+        #
         bin_s = self._punto_bin_s
         cps_bins = self._punto_arr.astype(float) / bin_s
+        n_bins   = len(cps_bins)
         cps_mean = float(cps_bins.mean())
-        cps_sem  = float(cps_bins.std(ddof=1) / np.sqrt(len(cps_bins))) \
-                   if len(cps_bins) > 1 else 0.0
+        cps_sem  = (float(cps_bins.std(ddof=1) / np.sqrt(n_bins))
+                    if n_bins > 1 else 0.0)
 
-        pot_arr = np.array(self._punto_potencias) if self._punto_potencias \
-                  else np.zeros((0, 2))
-        if len(pot_arr) > 1:
+        pot_arr = (np.array(self._punto_potencias)
+                   if self._punto_potencias else np.zeros((0, 2)))
+
+        # Período por bin (Bin Length + Time between Bins)
+        t_step_s = (self.spn_bin_ms.value() + self.spn_time_between.value()) / 1000.0
+        t_bins = (np.arange(n_bins) + 0.5) * t_step_s     # tiempo del centro
+
+        if len(pot_arr) >= 2:
+            # Interpolación lineal de P(t) en el tiempo de cada bin.
+            # np.interp extrapola con los extremos (clip), válido aquí
+            # porque el muestreo de potencia cubre todo el punto.
+            P_at_bin = np.interp(t_bins, pot_arr[:, 0], pot_arr[:, 1])
             pot_mean = float(pot_arr[:, 1].mean())
             pot_sem  = float(pot_arr[:, 1].std(ddof=1) / np.sqrt(len(pot_arr)))
         elif len(pot_arr) == 1:
+            P_at_bin = np.full(n_bins, float(pot_arr[0, 1]))
             pot_mean = float(pot_arr[0, 1])
             pot_sem  = 0.005 * pot_mean        # 0.5 % típico iBeam Smart
         else:
+            P_at_bin = np.zeros(n_bins)
             pot_mean = 0.0; pot_sem = 0.0
 
-        if pot_mean > 0 and cps_mean > 0:
+        # I_norm con tratamiento de ruido bin-a-bin
+        valid = (P_at_bin > 0)
+        if valid.sum() > 1 and cps_mean > 0:
+            I_per_bin = cps_bins[valid] / P_at_bin[valid]
+            # Estadística por chunks: M ∈ [10, 100], cada chunk con
+            # ≥ 50 bins para promediar el ruido de Poisson antes de
+            # calcular la SEM. Captura mejor las correlaciones a tiempos
+            # largos que la SEM directa de los bins individuales.
+            n_v = int(valid.sum())
+            M = max(10, min(100, n_v // 50))
+            chunk_size = n_v // M
+            if chunk_size >= 1 and M >= 2:
+                I_chunked = (I_per_bin[: M * chunk_size]
+                             .reshape(M, chunk_size).mean(axis=1))
+                I_norm  = float(I_chunked.mean())
+                sigma_I = float(I_chunked.std(ddof=1) / np.sqrt(M))
+            else:
+                I_norm  = float(I_per_bin.mean())
+                sigma_I = (float(I_per_bin.std(ddof=1) / np.sqrt(len(I_per_bin)))
+                           if len(I_per_bin) > 1 else 0.0)
+            # Cota inferior por Poisson: si cae por debajo del piso
+            # de Poisson (laser perfectamente estable), usamos ese piso.
+            #   σ_Poisson(I) = sqrt(N_total) / (P · T_total)
+            #               = I_norm / sqrt(N_total)
+            N_total = float(self._punto_arr.sum())
+            if N_total > 0:
+                sigma_poisson = I_norm / np.sqrt(N_total)
+                sigma_I = max(sigma_I, sigma_poisson)
+        elif pot_mean > 0 and cps_mean > 0:
+            # Fallback: sin lecturas de potencia válidas, propagación clásica
             I_norm = cps_mean / pot_mean
-            rel = np.sqrt((cps_sem / cps_mean) ** 2 +
-                          (pot_sem / pot_mean) ** 2)
+            rel = np.sqrt((cps_sem / cps_mean) ** 2
+                          + (pot_sem / pot_mean) ** 2)
             sigma_I = I_norm * rel
         else:
             I_norm = 0.0; sigma_I = 0.0
