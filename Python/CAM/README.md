@@ -123,12 +123,64 @@ pip install numpy matplotlib opencv-python Pillow
 
 ---
 
-## Captura con cámara Thorlabs DCC
+## Aplicación ThorCam (GUI nativa macOS)
+
+Aplicación gráfica para captura interactiva con vista en vivo y controles de cámara.
+
+### Características
+
+- **Vista en vivo** con histograma en tiempo real
+- **Estadísticas** del frame: min/max/media/desviación estándar/% saturación
+- **Controles de cámara:** exposición, ganancia
+- **Procesamiento software:** brillo, contraste, falso color (mapa térmico), resaltado de saturación
+- **Captura rápida** con tecla `Espacio` o botón
+- **5 formatos de guardado:**
+  - `PNG` — 8-bit sin pérdida
+  - `JPG` — 8-bit comprimido
+  - `TIFF 8-bit`
+  - `TIFF float32` — **valores decimales en [0,1]**, para polarimetría
+  - `NPY float64` — formato NumPy nativo, máxima precisión
+- **Prefijos polarimétricos preconfigurados:** `I_0_0`, `I_45_0`, `I_90_0`, `I_45_90` (compatibles con `CamPol_3.py`)
+
+### Ejecutar desde código fuente
+
+```bash
+source venv/bin/activate
+pip install PySide6 tifffile
+python ThorCam_App.py
+```
+
+### Generar aplicación nativa macOS
+
+```bash
+./build_app.sh
+```
+
+Esto produce `dist/ThorCam.app`. Para instalarla:
+
+```bash
+mv dist/ThorCam.app /Applications/
+open /Applications/ThorCam.app
+```
+
+La primera vez macOS pedirá permiso de cámara (`Configuración → Privacidad y Seguridad → Cámara`).
+
+### Flujo polarimétrico con ThorCam
+
+1. Conecta la CCD y abre ThorCam
+2. Ajusta exposición/ganancia hasta evitar saturación (panel de estadísticas)
+3. Selecciona formato **TIFF float32** o **NPY**
+4. Para cada combinación polarizador/retardador:
+   - Selecciona el prefijo polarimétrico correspondiente (`I_0_0`, etc.)
+   - Presiona `Espacio` para capturar
+5. Mueve las cuatro imágenes a la carpeta del proyecto y ejecuta `python CamPol_3.py`
+
+> **Nota sobre macOS y cámaras DCC:** IDS Imaging descontinuó el SDK uEye para macOS. La aplicación intenta primero el backend nativo (`pyueye`) si está disponible; si no, usa OpenCV (UVC). Para acceso completo a la DCC en Mac, usar **IDS Peak** (`https://en.ids-imaging.com/ids-peak.html`) o ejecutar la app desde Windows/Linux donde el SDK funciona.
+
+## Captura por línea de comandos (`captura_dcc.py`)
 
 ```bash
 python captura_dcc.py
 ```
 
-Intenta captura mediante el SDK IDS uEye nativo (pyueye). Si el SDK no está instalado, usa OpenCV como fallback UVC. Las imágenes se guardan en `capturas_raw/` como TIFF.
-
-Para habilitar el SDK nativo descarga IDS Peak desde `https://en.ids-imaging.com/ids-peak.html`.
+Versión CLI: captura 4 imágenes secuencialmente y las guarda como TIFF en `capturas_raw/`.

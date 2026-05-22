@@ -1,0 +1,16 @@
+# Build artifacts
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# macOS
+.DS_Store
+
+# Outputs (regeneradas)
+capturas_raw/
+ThorCam_capturas/
