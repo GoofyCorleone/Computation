@@ -71,7 +71,12 @@ class OpenCVBackend:
     def get_info(self):
         w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        return f"UVC {w}×{h} @ {self.bit_depth}-bit"
+        # Heurística: resoluciones típicas de la FaceTime/built-in
+        if (w, h) in [(1920, 1080), (1280, 720), (640, 480), (1552, 1552)]:
+            etiqueta = "📷 MacBook (built-in)"
+        else:
+            etiqueta = "🎥 UVC externa"
+        return f"{etiqueta}  {w}×{h} @ {self.bit_depth}-bit"
 
     def close(self):
         if self.cap is not None:
@@ -118,7 +123,7 @@ class PyUEyeBackend:
         self.ueye.is_SetHardwareGain(self.hcam, int(valor), -1, -1, -1)
 
     def get_info(self):
-        return f"uEye {self.sensor} {self.width}×{self.height} @ 8-bit"
+        return f"🔬 Thorlabs/IDS uEye {self.sensor}  {self.width}×{self.height} @ 8-bit"
 
     def close(self):
         self.ueye.is_FreeImageMem(self.hcam, self.mem_ptr, self.mem_id)
@@ -199,15 +204,19 @@ class ThorCamApp(QMainWindow):
 
         self.label_video = QLabel("Iniciando cámara...")
         self.label_video.setAlignment(Qt.AlignCenter)
-        self.label_video.setMinimumSize(800, 600)
+        self.label_video.setMinimumSize(640, 480)
         self.label_video.setStyleSheet("background:#101010; color:#aaa; border:1px solid #444;")
-        self.label_video.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # Ignorar tamaño del pixmap para que el widget NO crezca con cada frame
+        self.label_video.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         col_izq.addWidget(self.label_video, 4)
 
         self.label_histograma = QLabel()
         self.label_histograma.setFixedHeight(120)
         self.label_histograma.setStyleSheet("background:#1a1a1a; border:1px solid #444;")
-        col_izq.addWidget(self.label_histograma, 1)
+        # Ignorar tamaño preferido del pixmap; respetar solo la altura fija
+        self.label_histograma.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.label_histograma.setScaledContents(True)
+        col_izq.addWidget(self.label_histograma, 0)
 
         layout_principal.addLayout(col_izq, 4)
 
@@ -418,8 +427,10 @@ class ThorCamApp(QMainWindow):
 
         h, w = display.shape[:2]
         qimg = QImage(display.data, w, h, w * 3, QImage.Format_RGB888)
+        # Escalar al tamaño ACTUAL del label (no fuerza relayout)
+        tam = self.label_video.size()
         pix = QPixmap.fromImage(qimg).scaled(
-            self.label_video.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            tam, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.label_video.setPixmap(pix)
 
         # Estadísticas
@@ -443,12 +454,13 @@ class ThorCamApp(QMainWindow):
         hist = cv2.calcHist([frame], [0], None, [256], [0, 256]).flatten()
         if hist.max() > 0:
             hist = hist / hist.max()
-        w, h = self.label_histograma.width(), self.label_histograma.height()
+        # Tamaño FIJO del pixmap (no depende del label) → no induce relayout
+        w, h = 512, 100
         pix = QPixmap(w, h)
         pix.fill(QColor(26, 26, 26))
         painter = QPainter(pix)
         painter.setPen(QPen(QColor(80, 200, 255), 1))
-        bar_w = max(1, w / 256)
+        bar_w = w / 256
         for i, v in enumerate(hist):
             x = int(i * bar_w)
             y = int(h - v * h * 0.95)
